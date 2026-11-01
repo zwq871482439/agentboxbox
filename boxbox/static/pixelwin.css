@@ -1,0 +1,115 @@
+/* 像素窗口（上岗）：首页办公室上叠的方角窗口。
+   米白底 + 深棕标题栏 + 2~3px 深色描边 + 硬阴影（不模糊）+ 方角，跟办公室像素画一个调子。
+   页面在 <head> 里引这个文件（<link rel="stylesheet" href="/static/pixelwin.css">），
+   窗口的 DOM 由 onboard-flow.js 现场搭出来，标记全在 #bx-onboard 底下，不会污染别的页面。 */
+#bx-onboard{position:fixed;inset:0;z-index:60;display:none}
+#bx-onboard.on{display:block}
+.pxw-mask{position:absolute;inset:0;background:rgba(10,8,6,.42)}
+.pxw{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 96px);overflow:auto;
+  background:#fbf3e1;border:3px solid #2b1d12;box-shadow:6px 6px 0 rgba(0,0,0,.45);
+  color:#2b1d12;font:14px/1.7 "Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif}
+/* 滚动条自己画：exe 里的 WebView2 默认是悬浮滚动条，鼠标不放上去看不见，
+   窗口比屏幕高时用户不知道下面还有按钮。自定义 ::-webkit-scrollbar 以后 Chromium 改用常驻滚动条。 */
+.pxw pre,.pxw{scrollbar-color:#6b4a2f #efe2c2;scrollbar-width:auto}
+.pxw::-webkit-scrollbar,.pxw pre::-webkit-scrollbar{width:12px;height:12px}
+.pxw::-webkit-scrollbar-track,.pxw pre::-webkit-scrollbar-track{background:#efe2c2;border-left:2px solid #2b1d12}
+.pxw::-webkit-scrollbar-thumb,.pxw pre::-webkit-scrollbar-thumb{background:#6b4a2f;border:2px solid #2b1d12}
+.pxw::-webkit-scrollbar-thumb:hover{background:#7d5836}
+/* 顶栏（深棕 + 白字）；像素窗口不抢顶栏：窗口垂直居中，办公室和顶栏都还在 */
+.pxw-title{display:flex;align-items:center;gap:10px;padding:8px 14px;background:#6b4a2f;color:#fff8e7;
+  font-size:15px;font-weight:700;border-bottom:3px solid #2b1d12}
+.pxw-body{padding:12px 16px 14px}
+.pxw-foot{display:flex;gap:10px;align-items:center;justify-content:flex-end;
+  padding:12px 18px;border-top:3px solid #2b1d12;background:#f3e7c9}
+.pxw-foot .sp{margin-right:auto;color:#4a3728;font-size:12.5px}
+/* 按钮：主按钮绿色，次按钮深棕底白字；方角 + 2px 描边 + 硬阴影 */
+.pxw button,.pxw select{font:inherit;cursor:pointer;border-radius:0}
+.pxb{display:inline-block;padding:6px 16px;background:#6b4a2f;color:#fff8e7;border:2px solid #2b1d12;
+  box-shadow:3px 3px 0 rgba(0,0,0,.35);font-size:14px}
+.pxb:hover{background:#7d5836}
+.pxb.main{background:#3f9b4f;color:#fff}
+.pxb.main:hover{background:#48ac59}
+.pxb[disabled]{opacity:.5;cursor:default}
+.pxb.small{padding:4px 10px;font-size:12.5px}
+/* 输入：白底深色描边，方角 */
+.pxw input[type=text],.pxw input[type=password],.pxw input[type=number],.pxw select,.pxw textarea{
+  width:100%;padding:6px 9px;background:#fff;border:2px solid #2b1d12;border-radius:0;color:#2b1d12;font:inherit;
+  line-height:1.35}                    /* 输入框不用窗口那么松的行高，整页才排得下 */
+.pxw input:focus,.pxw select:focus,.pxw textarea:focus{outline:3px solid #3f9b4f;outline-offset:1px}
+/* 首页先引了一份第三方主题，它给 .card / pre 定了自己的字色（浅灰），会顺着钻进这个米白窗口：
+   ① 栏那个 prompt 框就成了白底浅灰字，看着像空的。下面 .card 和 pre 都把字色拧回窗口正文的深棕。 */
+.pxw label{display:block;margin:0 0 6px;color:#3b2a1a;font-size:13px}
+.pxw .lb{color:#3b2a1a;font-size:12.5px}
+.pxw .lb.head{font-size:14px;font-weight:700;text-align:center;margin-bottom:8px}
+.pxw .hint{color:#4a3728;font-size:12.5px;margin:2px 0 0}
+.pxw .chk{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;color:#3b2a1a}
+.pxw .chk input{width:auto;accent-color:#3f9b4f}
+.pxw .frow{margin-top:7px}
+.pxw .frow > label{margin-bottom:4px}
+.pxw .frow > .pxb{margin-top:2px}
+.pxw pre{background:#fff;color:#2b1d12;border:2px solid #2b1d12;box-shadow:3px 3px 0 rgba(0,0,0,.25);
+  padding:10px 12px;margin:8px 0;white-space:pre-wrap;word-break:break-all;
+  font:13px/1.65 Consolas,"Cascadia Mono",monospace;max-height:180px;overflow:auto}
+.pxw .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pxw .card{border:2px solid #2b1d12;background:#fdf8ec;color:#2b1d12;box-shadow:3px 3px 0 rgba(0,0,0,.22);padding:10px 12px;margin-bottom:10px}
+.pxw .card h3{margin:0 0 6px;font-size:14px;color:#2b1d12;font-weight:700}
+.pxw .card p{margin:6px 0 0}
+.pxw .msg{margin:10px 0 0;padding:8px 12px;border:2px solid #2b1d12;background:#fdf8ec;font-size:13px}
+.pxw .hide{display:none}            /* 流程里到处用 class="hide" 收起一块（跟 [hidden] 一个意思） */
+.pxw .msg.ok{background:#e2f3e2;color:#215c2c}
+.pxw .msg.fail{background:#fbe3df;color:#8c2318}
+.pxw .msg.wait{background:#fdf3d8;color:#6b4a2f}
+/* 选猫（照 125-50）：左边一个大头像框 + 框两侧的深色 ◀ ▶ + 框里猫下面一行计数；不再套一层小卡片 */
+.pxw .pick{display:flex;align-items:center;gap:14px;justify-content:center}
+.pxw .avbox{flex:0 0 190px;width:190px;border:3px solid #2b1d12;background:#f0e4c6;
+  box-shadow:5px 5px 0 rgba(0,0,0,.28);padding:10px 10px 12px;text-align:center}
+.pxw .avbox .av{image-rendering:pixelated;width:166px;height:166px;background:#f0e4c6;
+  border:2px solid #2b1d12;display:block;margin:0 auto}
+.pxw .avbox .cnt{margin-top:8px;color:#3b2a1a;font-size:12.5px;font-weight:700}
+.pxw .avbox .adv-acc{margin-top:10px}
+.pxw .arrow{flex:0 0 auto;width:40px;height:40px;padding:0;font-size:17px;line-height:1;
+  background:#6b4a2f;color:#fff8e7;border:2px solid #2b1d12;box-shadow:3px 3px 0 rgba(0,0,0,.35)}
+.pxw .arrow:hover{background:#7d5836}
+/* 三个点动画：等首领 / 打工猫报到 */
+.pxw .dots span{display:inline-block;width:8px;height:8px;margin:0 3px;background:#6b4a2f;animation:pxw-dot 1.2s infinite}
+.pxw .dots span:nth-child(2){animation-delay:.2s}
+.pxw .dots span:nth-child(3){animation-delay:.4s}
+@keyframes pxw-dot{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.pxw .av{image-rendering:pixelated;width:96px;height:96px;background:#f0e4c6;border:2px solid #2b1d12;display:block}
+.pxw .tri .av{margin:0 auto}            /* 等首领那一栏里的小头像居中 */
+/* 「高级」：默认折叠的小节（上下文窗口 / 最大输出 / 接口类型 / 主机名） */
+.pxw details.adv{margin-top:10px;border:2px solid #2b1d12;background:#f6ecd6;padding:6px 10px}
+.pxw details.adv > summary{cursor:pointer;color:#3b2a1a;font-size:13px;font-weight:700;list-style:none}
+.pxw details.adv > summary::-webkit-details-marker{display:none}
+.pxw details.adv > summary::before{content:"\25B8 ";color:#6b4a2f}
+.pxw details.adv[open] > summary::before{content:"\25BE "}
+/* 测试连接失败时的「详情」：服务商原文默认收起，点开才看 */
+.pxw details.msg-detail{margin:8px 0 0;border:2px solid #d8c8a6;background:#fbf4e0;padding:4px 8px}
+.pxw details.msg-detail > summary{cursor:pointer;color:#6b4a2f;font-size:12px;font-weight:700;list-style:none}
+.pxw details.msg-detail > summary::-webkit-details-marker{display:none}
+.pxw details.msg-detail > summary::before{content:"\25B8 ";color:#6b4a2f}
+.pxw details.msg-detail[open] > summary::before{content:"\25BE "}
+.pxw details.msg-detail > pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 2px;font-size:12px;max-height:160px;overflow:auto}
+/* 连接三栏（照 125-89） */
+.pxw .tri{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.pxw .tri .card{margin:0;min-height:190px}
+.pxw .tri .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  background:#6b4a2f;color:#fff;font-size:12px;font-weight:700;margin-bottom:8px}
+.pxw .tri .done .step{background:#3f9b4f}
+/* 左右两栏选一（打工猫接入方式） */
+.pxw .pick2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pxw .pick2 .card{cursor:pointer;margin:0}
+.pxw .pick2 .card.sel{outline:3px solid #3f9b4f;outline-offset:-1px;background:#eef7ec}
+.pxw .pick2 .card h3::before{content:"\25CB "}
+.pxw .pick2 .card.sel h3::before{content:"\25CF "}
+.pxw .sub3{margin-top:10px}
+/* 窄屏：两栏 / 三栏折成一列，窗口贴顶 */
+@media (max-width:760px){
+ .pxw{width:calc(100vw - 16px);max-height:calc(100vh - 24px);top:8px;transform:translate(-50%,0)}
+ .pxw .grid2,.pxw .tri,.pxw .pick2{grid-template-columns:1fr}
+}
+/* 「减少动态效果」：关掉三个点、窗口弹出的缩放（协议里的动画另由画布负责淡入淡出） */
+@media (prefers-reduced-motion:reduce){
+ .pxw .dots span{animation:none;opacity:1}
+}

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="doc.title">看板 · 猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/board.css">
+<script src="/static/i18n.js"></script>
+<script src="/static/i18n-board.js"></script>
+<script src="/static/topbar.js" defer></script>
+</head>
+<body>
+
+<header id="bx-top"></header>
+
+<main class="grid">
+  <div class="col col-l">
+    <section class="panel">
+      <div class="phead"><h2 data-i18n="bd.title.station">工位</h2><span class="n" id="stN"></span><span class="more" id="stHint"></span></div>
+      <div class="stations pxscroll" id="stations"><div class="empty" data-i18n="bd.empty.stations">还没有工位。去<a href="/stations">「工位」</a>登记一个。</div></div>
+    </section>
+    <section class="panel">
+      <div class="phead"><h2 data-i18n="bd.title.todo">待办</h2><span class="n" id="tdN"></span></div>
+      <ul class="todo pxscroll" id="todo"><li class="empty" data-i18n="bd.empty.todo">没有待办。</li></ul>
+    </section>
+  </div>
+  <div class="col col-r">
+    <section class="panel">
+      <div class="phead"><h2 data-i18n="bd.title.cards">任务卡</h2><span class="n" id="tkN"></span>
+        <span class="tk-tools"><select id="tkDays" title="按最后更新时间筛" data-i18n-title="bd.filter.byUpdated">
+          <option value="0" data-i18n="bd.filter.all">全部时间</option><option value="1" data-i18n="bd.filter.today">今天</option>
+          <option value="7" data-i18n="bd.filter.7">近 7 天</option>
+          <option value="30" data-i18n="bd.filter.30">近 30 天</option><option value="custom" data-i18n="bd.filter.custom">自定义</option></select>
+        <span id="tkRange" hidden><input type="date" id="tkFrom" title="从哪一天开始（含当天）" data-i18n-title="bd.filter.fromTitle">
+          <span class="dash" data-i18n="bd.filter.to">到</span><input type="date" id="tkTo" data-i18n-title="bd.filter.toTitle" title="到哪一天为止（含当天）"></span>
+        <button class="btn" type="button" id="tkCsv" data-i18n="bd.exportCsv" data-i18n-title="bd.exportCsvTitle">导出 CSV</button></span></div>
+      <div class="scroll tk-scroll pxscroll"><table class="tbl">
+        <thead><tr><th data-i18n="bd.task.kv.id">编号</th><th data-i18n="bd.task.kv.title">标题</th>
+          <th data-i18n="bd.task.kv.kind">类别</th><th data-i18n="bd.task.kv.station">工位</th>
+          <th data-i18n="bd.task.kv.state">状态</th><th data-i18n="bd.task.kv.round">第几轮</th>
+          <th data-i18n="bd.task.kv.from">发起</th><th data-i18n="bd.task.kv.updated">更新</th></tr></thead>
+        <tbody id="tasks"><tr><td colspan="8" class="empty" data-i18n="bd.drawer.loading">正在读取…</td></tr></tbody>
+      </table></div>
+      <div class="pager" id="tkPager" hidden>
+        <button class="btn" type="button" id="tkPrev" data-i18n="bd.tk.prev">上一页</button><span id="tkPage"></span>
+        <button class="btn" type="button" id="tkNext" data-i18n="bd.tk.next">下一页</button></div>
+    </section>
+  </div>
+</main>
+
+<div class="wide">
+  <details class="panel" id="tokBox" open>
+    <summary data-i18n="bd.tok.summary">用量（token）：近 7 天每次运行实际消耗多少</summary>
+    <div class="dbody" id="tokBody"><div class="empty" data-i18n="bd.tok.emptyHint">还没有用量。等工位跑过一轮再来看。</div></div>
+  </details>
+</div>
+
+<footer id="foot"></footer>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden></aside>
+
+<script src="/static/board.js"></script>
+</body>
+</html>

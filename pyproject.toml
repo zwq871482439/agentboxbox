@@ -1,0 +1,26 @@
+[project]
+name = "agent-boxbox"
+version = "0.4.0"
+description = "boxbox 核心：TeamLeader 经 MCP 派活给工位，质检 + 验收 + 实测 token。核心只用标准库。"
+requires-python = ">=3.11"
+
+# ---------------------------------------------------------------------------
+# ruff：只用 ruff check（lint），不跑 ruff format 全量重排（现有代码的紧凑写法是有意的，重排会把 blame 冲掉）。
+# - 规则：E/W（pycodestyle）、F（pyflakes）、B（bugbear）、I（import 顺序）。不开 UP（pyupgrade）：
+#   核心大量 % 格式化是统一风格，改成 f-string 没有收益；
+# - 行宽 160：核心很多一行一句的中文注释，120 会逼着拆行；
+# - 没有 per-file-ignores：全仓（后端 / 前端静态 / 办公室源码 / tests / tools）一条规则都不放过，
+#   一行多句（E701/E702）也不放过 —— 回归检查写成脚本风格的就拆成一行一句；
+# - 回归：tests/test_ruff.py 跑 `ruff check .`，装了 ruff 就必须 0 错，没装就跳过（核心不依赖它）。
+# 本地：python -m ruff check . ；能自动修的：python -m ruff check . --fix
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 160
+target-version = "py311"
+extend-exclude = ["assets", "office", "build", "dist", "data", ".worktrees", "calls", "static", "tests/personas/baseline"]   # 基准里是打工猫写的代码，原样留着
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["boxbox"]

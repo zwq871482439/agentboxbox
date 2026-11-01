@@ -1,0 +1,82 @@
+{
+  "cursor": {
+    "client": "cursor",
+    "label": "Cursor",
+    "config_path": "{project}/.cursor/mcp.json",
+    "config_path_global": "~/.cursor/mcp.json",
+    "format": "json",
+    "transport": "http",
+    "http_entry": {},
+    "chat_box_name": "聊天框（Chat / Composer）",
+    "mcp_menu_hint": "Settings → Cursor Settings → Tools & MCP（待核：不同版本菜单名可能叫 Features → MCP）",
+    "notes": "项目级优先；未给项目目录时 resolve_path 回落到全局 ~/.cursor/mcp.json。菜单入口待核。"
+  },
+  "claude-code": {
+    "client": "claude-code",
+    "label": "Claude Code",
+    "config_path": "~/.claude.json",
+    "format": "json",
+    "transport": "http",
+    "http_entry": {
+      "type": "http"
+    },
+    "chat_box_name": "终端里的 Claude Code 提示符",
+    "mcp_menu_hint": "无图形菜单；直接写 ~/.claude.json 顶层 mcpServers（另有项目级键，只写全局）",
+    "notes": "顶层 \"mcpServers\"，与 Cursor 同格式。文件里还有其他键，写时必须保留。"
+  },
+  "codex": {
+    "client": "codex",
+    "label": "Codex",
+    "config_path": "~/.codex/config.toml",
+    "format": "toml",
+    "transport": "http",
+    "chat_box_name": "终端里的 Codex 提示符",
+    "mcp_menu_hint": "无图形菜单；直接写 ~/.codex/config.toml 的 [mcp_servers.boxbox] 段",
+    "notes": "TOML 用文本方式写：无此段则末尾追加，有则整段替换（段范围 = 段头到下一个 [ 行之前）。读用 tomllib，不用第三方库。0.3 起只写 url（Codex 文档：[mcp_servers.<名字>] 写 url 就是 Streamable HTTP），不再起子进程占着 exe。",
+    "http_entry": {}
+  },
+  "kimi-code": {
+    "client": "kimi-code",
+    "label": "Kimi Code",
+    "config_path": null,
+    "format": "snippet",
+    "transport": "http",
+    "chat_box_name": "Kimi Code 聊天框",
+    "mcp_menu_hint": "待核：设置里 MCP 入口位置",
+    "notes": "待核：配置文件位置未知，只给 snippet() 片段让用户手动粘贴。片段只写 url（Streamable HTTP）；这家认不认 url 还没在真客户端上核过。",
+    "http_entry": {}
+  },
+  "minimax-code": {
+    "client": "minimax-code",
+    "label": "MiniMax Code",
+    "config_path": null,
+    "format": "snippet",
+    "transport": "http",
+    "chat_box_name": "MiniMax Code 聊天框",
+    "mcp_menu_hint": "待核：设置里 MCP 入口位置",
+    "notes": "待核：配置文件位置未知，只给 snippet() 片段让用户手动粘贴。片段只写 url（Streamable HTTP）；这家认不认 url 还没在真客户端上核过。",
+    "http_entry": {}
+  },
+  "grok-bot": {
+    "client": "grok-bot",
+    "label": "Grok Bot",
+    "config_path": null,
+    "format": "snippet",
+    "transport": "http",
+    "chat_box_name": "Grok Bot 聊天框",
+    "mcp_menu_hint": "待核：设置里 MCP 入口位置",
+    "notes": "待核：配置文件位置未知，只给 snippet() 片段让用户手动粘贴。片段只写 url（Streamable HTTP）；这家认不认 url 还没在真客户端上核过。",
+    "http_entry": {}
+  },
+  "workbuddy": {
+    "client": "workbuddy",
+    "label": "WorkBuddy",
+    "config_path": null,
+    "format": "snippet",
+    "transport": "http",
+    "chat_box_name": "WorkBuddy 聊天框",
+    "mcp_menu_hint": "待核：设置里 MCP 入口位置",
+    "notes": "待核：配置文件位置未知，只给 snippet() 片段让用户手动粘贴。片段只写 url（Streamable HTTP）；这家认不认 url 还没在真客户端上核过。",
+    "http_entry": {}
+  }
+}

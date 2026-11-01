@@ -1,0 +1,608 @@
+<!doctype html><html lang="zh" data-bs-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/vendor/tabler/tabler.min.css">
+<link rel="stylesheet" href="/static/pixelwin.css">
+<style>
+/* 首页 = 顶栏 + 整屏办公室（页面不滚动）。动态 / 用量 和昼夜开关都挪进办公室画面里；
+   要你处理的事（/api/meta 的 alerts 第 1 级）在办公室顶部的提示条里说。
+   配色：底 + 一种品牌红（只用在顶边）+ 三个有含义的状态色（在跑 / 等你 / 失败），其余状态只用文字深浅。 */
+:root,[data-bs-theme=dark]{--bg:#15151e;--bg2:#1c1c27;--line:#262632;--red:#e63946;--txt:#ececf0;--dim:#8a8a97;--dim2:#5e5e6b;
+ --tblr-body-bg:#15151e;--tblr-bg-surface:#15151e;--tblr-border-color:#262632;
+ --s-run:#3ccf7e;--s-you:#ff8a1f;--s-fail:#ff4545}
+html,body{height:100%}
+body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--txt);
+ font-size:13.5px;margin:0;overflow:hidden;display:flex;flex-direction:column}
+.num{font-family:Consolas,"Cascadia Mono",monospace;font-variant-numeric:tabular-nums}
+.dim{color:var(--dim)}.dim2{color:var(--dim2)}.tx{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+[hidden]{display:none!important}
+a{color:inherit}
+.brand{font-weight:700;font-size:24px;color:#fff;text-decoration:none;line-height:1;letter-spacing:.5px}
+/* 舞台：顶栏以下全是办公室 */
+.stage{position:relative;flex:1;min-height:200px;margin:8px 12px 12px}
+.office-wrap{position:absolute;inset:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#15151e}
+.office-wrap iframe{display:block;width:100%;height:100%;border:0;background:#15151e}
+/* 面板浮窗：入口在办公室画布里（动态 / 用量按钮），浮窗右上角是 ×。停靠条那行的样式已删。 */
+/* 小浮窗：从停靠条的按钮下方弹出。像素风 = 方角 + 2px 深色描边 + 硬阴影；打开时 120ms 里从 0.9 倍缩放 + 上移 2px 弹出
+   开关记在浏览器里；DOM 不重建，轮询只换里面的内容 */
+.pnl{position:fixed;left:0;top:0;z-index:40;width:min(560px,calc(100vw - 24px));max-height:min(74vh,660px);
+  display:none;flex-direction:column;overflow:auto;background:#1a1a24;border:2px solid #0d0d13;border-radius:0;
+  padding:12px 16px 14px;box-shadow:4px 4px 0 rgba(0,0,0,.45)}
+.pnl.open{display:flex;animation:bx-pop .12s ease-out}
+@keyframes bx-pop{from{opacity:.2;transform:translateY(-2px) scale(.9)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pnl.open{animation:none}}
+.pnl-x{position:absolute;right:10px;top:8px;background:none;border:0;color:var(--dim);font-size:20px;cursor:pointer;line-height:1}
+.pnl-x:hover{color:#fff}
+.ph{display:flex;align-items:baseline;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
+.ph .n{font-size:12.5px;color:var(--dim)}
+.ph .sp{margin-left:auto;display:flex;gap:10px;align-items:center}
+.btn-lite{font:inherit;font-size:12.5px;cursor:pointer;border:1px solid var(--line);background:transparent;
+ color:var(--dim);border-radius:5px;padding:3px 10px;text-decoration:none;display:inline-block}
+.btn-lite:hover{color:#fff;border-color:var(--dim)}
+.btn-lite.p{background:#2a2a37;color:#fff}
+/* 工位列表（「列表」模式）：工位 · 角色 · 客户端 · 状态 · 在做的卡 · 已过分钟 */
+.tr:hover{background:var(--bg2)}
+.sw{font-weight:600;white-space:nowrap}
+.w-run{color:var(--s-run)}.w-fail{color:var(--s-fail)}.w-idle{color:var(--dim)}
+/* 动态：一行一条；不用红点 / 绿点，要处理的事看「只看需要我处理的」和办公室提示条 */
+.ev{display:grid;grid-template-columns:46px 78px minmax(0,1fr);gap:0 12px;align-items:baseline;padding:8px;border-bottom:1px solid var(--line);font-size:13px}
+.ev .t{color:var(--dim);font-variant-numeric:tabular-nums}
+.ev .who{color:var(--dim)}
+/* 表格 */
+.table{--tblr-table-bg:transparent;color:var(--txt);font-size:13px}
+.table th{color:var(--dim);font-weight:400;font-size:12px;border-color:var(--line)!important;white-space:nowrap}
+.th-note{display:block;font-weight:400;font-size:11px;color:var(--dim2);text-transform:none}
+.qbar{display:inline-block;width:26px;height:8px;border:1px solid var(--line);background:var(--bg2);margin-right:4px;vertical-align:middle;border-radius:0}
+.qbar i{display:block;height:100%;background:#4f8cc8}
+.qbar.red i{background:var(--red)}
+.qerr{color:var(--dim);font-size:12px}
+.table td{border-color:var(--line)!important}
+.tk th,.tk td{text-align:right}.tk th:first-child,.tk td:first-child{text-align:left}
+.kv th{width:88px;color:var(--dim);font-weight:400;white-space:nowrap}
+.kv td,.kv th{padding:4px 8px 4px 0;border:0!important;vertical-align:top}
+/* 自检项 */
+.chk{padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.chk .lb{font-weight:600;color:#fff}
+.chk .dt{color:var(--dim);margin-top:2px}
+.chk .fx{color:var(--s-you);margin-top:2px}
+.empty{padding:14px 8px;color:var(--dim);font-size:13px;line-height:1.7}
+.empty a{color:#fff;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.more{color:var(--dim);font-size:12.5px;cursor:pointer;background:none;border:0;padding:10px 0 0 8px}
+.more:hover{color:#fff}
+.checkline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);cursor:pointer}
+.checkline input{accent-color:var(--red)}
+.foot{font-size:12px;color:var(--dim2);padding:14px 0 0}
+/* 抽屉 */
+.offcanvas{background:#1a1a24;color:var(--txt);border-left:1px solid var(--line)}
+.offcanvas.show{visibility:visible;transform:none}.offcanvas-backdrop.show{opacity:.55}
+#drawer pre{white-space:pre-wrap;font-size:12px;max-height:300px;overflow:auto;
+ background:#111118;color:#e6e6ea;padding:12px;border-radius:3px;border:1px solid var(--line)}
+#drawer h4{font-size:13.5px;font-weight:600;color:#fff;margin:18px 0 6px}
+#drawer ol{margin:0;padding-left:20px;font-size:13px;line-height:1.7}
+.hint{color:var(--s-you);font-size:12.5px}
+/* 窄屏（手机）：顶栏换行；浮窗铺满屏幕宽度 */
+@media (max-width:820px){
+ .stage{margin:6px 8px 8px}
+ .pnl{width:calc(100vw - 16px)}}
+/* 上次退出 / 崩溃时中断的卡：打开首页时弹一个像素窗口问用户（样式照上岗那套 .pxw） */
+#bx-resume{position:fixed;inset:0;z-index:60;display:none}
+#bx-resume.on{display:block}
+</style><script src="/static/i18n.js"></script>
+<script src="/static/i18n-home.js"></script>
+<script src="/static/topbar.js" defer></script>
+<!-- 上岗脚本：画猫代码（/static/cats.js 就是 office/build/cats.js）+ 服务商清单 + 上岗流程
+     （像素窗口，按公共底座 / 首领 / 打工猫 / 编排拆四个文件，flow 依赖前面几个） -->
+<script src="/static/cats.js"></script>
+<script src="/static/providers.js"></script>
+<script src="/static/onboard-common.js"></script>
+<script src="/static/onboard-leader.js"></script>
+<script src="/static/onboard-member.js"></script>
+<script src="/static/onboard-flow.js"></script></head><body class="mode-office">
+
+<header id="bx-top"></header>
+
+<!-- 顶栏下面直接是办公室画面：动态 / 用量 和昼夜开关的入口都在画布里（实体按钮，点它开同名面板）。 -->
+
+<div class="stage" id="stage">
+  <div class="office-wrap" id="office-wrap">
+    <iframe id="office-frame" title="办公室视图" data-i18n-title="home.officeTitle"></iframe>
+    <script>
+      /* 首页的 ?clock= / ?seed= / ?phase= 透传给办公室画布（截图脚本和办公室用例靠这三个钩子钉住
+         墙上时钟、随机数和天色；不放这三个参数时就是平时的样子） */
+      (function () {
+        var f = document.getElementById("office-frame");
+        if (!f) { return; }
+        var q = new URLSearchParams(location.search);
+        var src = "/office?embed=1&demo=0&live=1&skin=chibicat";
+        ["clock", "seed", "phase", "lang"].forEach(function (k) {
+          var v = q.get(k);
+          if (v !== null && v !== "") { src += "&" + k + "=" + encodeURIComponent(v); }
+        });
+        f.src = src;
+      })();
+    </script>
+  </div>
+
+
+  <aside class="pnl" id="pnl-tl"><button class="pnl-x" type="button" data-p="tl" title="收起" data-i18n-title="home.collapse">×</button>
+    <div class="ph"><h2 class="sec" data-i18n="home.panel.feed">动态</h2><span class="n" id="tl-note"></span></div>
+    <div class="ph">
+      <label class="checkline"><input type="checkbox" id="only-me"> <span data-i18n="home.onlyMine">只看需要我处理的</span></label>
+      <span class="sp"><button type="button" class="more" id="tl-more" style="padding:0" data-i18n="home.allCount0">全部 0 条</button></span>
+    </div>
+    <div id="tl"><div class="empty" data-i18n="home.readingFeed">正在读动态…</div></div>
+    <div class="foot" data-i18n="home.feedFoot">每 5 秒看一次工位，每 15 秒看一次动态和用量。</div>
+  </aside>
+
+  <aside class="pnl" id="pnl-tok"><button class="pnl-x" type="button" data-p="tok" title="收起" data-i18n-title="home.collapse">×</button>
+    <div class="ph"><h2 class="sec" data-i18n="home.panel.usage">用量</h2>
+      <span class="n" data-i18n="home.usageNote">按每次运行实测的 token 记；拿不到 token 的工位（外部客户端）写「不计」</span></div>
+    <div id="tok"><div class="empty" data-i18n="home.readingUsage">正在读用量…</div></div>
+    <div class="foot" id="tok-foot"></div>
+  </aside>
+
+  <aside class="pnl" id="pnl-conn"><button class="pnl-x" type="button" data-p="conn" title="收起" data-i18n-title="home.collapse">×</button>
+    <div class="ph"><h2 class="sec" data-i18n="home.panel.conn">连接状态</h2><span class="n" data-i18n="home.connNote">打开面板时查一次，可以手动重查</span></div>
+    <div id="conn"><div class="empty" data-i18n="home.readingCheck">正在读自检…</div></div>
+    <div class="foot"><button type="button" class="btn-lite" id="doc-re" data-i18n="home.recheck">重新查一次</button>
+      <a class="btn-lite" href="/doctor" data-i18n="home.goDoctor">去自检页</a></div>
+  </aside>
+</div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="drawer" style="width:min(760px,96vw)">
+  <div class="offcanvas-header">
+    <h2 class="offcanvas-title" id="dr-title" style="font-weight:700;font-size:20px" data-i18n="home.summonTitle">叫醒首领</h2>
+    <button type="button" class="btn-close btn-close-white" id="dr-close"></button></div>
+  <div class="offcanvas-body"><div class="dim mb-2" id="dr-note"></div><div id="dr-html"></div></div>
+</div>
+<div class="offcanvas-backdrop fade" id="backdrop" style="display:none"></div>
+
+<script>
+(function () {
+  "use strict";
+  /* 先问一次要不要进上岗：/api/onboard/state 的 step 不是 0（还没有首领、首领没握过手、还没打工猫）
+     就在办公室上弹像素窗口做上岗（onboard-flow.js）。
+     核心没在跑（fetch 失败）不拦着，照旧显示办公室。轮询照旧起，上岗窗口叠在上面。 */
+  fetch("/api/onboard/state", { cache: "no-store" }).then(function (r) {
+    return r.ok ? r.json() : null;
+  }).then(function (d) {
+    startPolling();
+    if (d && window.BXOnboard) window.BXOnboard.boot(d);     // step 为 0 时 boot 直接不管
+  }).catch(function () { startPolling(); });
+  /* 工位页「登记向导」过来：已经上岗过就别再走一遍，直接去工位页招新的 */
+  (function () {
+    if (location.hash !== "#recruit") return;
+    fetch("/api/onboard/state", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (d && !d.step) location.replace("/stations#recruit");
+    }).catch(function () {});
+  })();
+
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var t = function (key, vars) { return window.BXi18n.t(key, vars); };
+  /* 问后端要文案时要带上语言，后端照这个语言回 */
+  function langParam() { return "?lang=" + window.BXi18n.lang(); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function num(n) { if (n == null) return "—"; return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function hm(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d)) return String(iso).slice(11, 16) || "—";
+    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+  }
+  function when(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d)) return String(iso).replace("T", " ").slice(0, 16);
+    var now = new Date();
+    var same = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    var md = ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+    return (same ? "" : md + " ") + hm(iso);
+  }
+  function api(p) {
+    return fetch(p, { cache: "no-store" }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
+    }).catch(function (e) { return { ok: false, error: String(e) }; });
+  }
+  function copy(text, btn) {
+    var done = function () { var o = btn.textContent; btn.textContent = t("home.copied"); setTimeout(function () { btn.textContent = o; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, fb); } else { fb(); }
+    function fb() {
+      var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { btn.textContent = t("home.copyFail"); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  /* 文案：只说人话。运行方式这些内部词翻成中文，主文案里不露英文状态词。 */
+  var RUNNER_WORD = { manual: "home.runnerManual", once: "home.runnerOnce", scheduled: "home.runnerScheduled" };
+  function runnerWord(r) { return t(RUNNER_WORD[r] || (r ? "home.runnerCustom" : "home.runnerNone")); }
+  function roleWord(r) { return t(r === "leader" ? "home.roleLeader" : "home.roleMember"); }
+  /* 客户端显示名：首领那行显示「真正连上来的那一家」 */
+  var CLIENT_LABEL = { cursor: "Cursor", "claude-code": "Claude Code", codex: "Codex",
+    other: "home.clientOther", "other-direct": "home.clientOtherDirect" };
+  function clientLabel(c) { var k = CLIENT_LABEL[c]; return k ? t(k) : String(c || ""); }
+  /* 「需要我处理的」= 第 1 级提醒相关的事件（口径跟 /api/meta 的 alerts 走）：
+     等你验收的卡（reviewing 事件带 who=user），以及第 1 级提醒点名的那张卡 */
+  function evData(e) { if (e.data) return e.data; try { e.data = e.json ? JSON.parse(e.json) : {}; } catch (x) { e.data = {}; } return e.data; }
+  function isMine(e) {
+    if (e.kind === "reviewing" && evData(e).who === "user") return true;
+    var al = (S.meta && S.meta.alerts) || [];
+    for (var i = 0; i < al.length; i++) {
+      var a = al[i];
+      if (a && a.level === 1 && a.task_id && e.task_id === a.task_id) return true;
+    }
+    return false;
+  }
+  var TL_SEEN_KEY = "bx-tl-seen";   /* 看过的最大事件号：动态面板一打开就记下，徽标只数这之后的 */
+  function tlSeen() { try { return parseInt(localStorage.getItem(TL_SEEN_KEY) || "0", 10) || 0; } catch (e) { return 0; } }
+  function tlMarkSeen() {
+    var top = EV.length ? Math.max.apply(null, EV.map(function (e) { return e.id || 0; })) : 0;
+    if (top > tlSeen()) { try { localStorage.setItem(TL_SEEN_KEY, String(top)); } catch (e) { } }
+  }
+  /* 未读数（动态 / 用量）报给画布 → 画布上那两个按钮右上角画红点 + 数字。
+     动态 = 需要我处理、还没看过的条数；用量 = 上次看过以后又跑了新的工位数。 */
+  var TOK_SEEN_KEY = "bx-tok-seen";
+  function tokSeen() { try { return JSON.parse(localStorage.getItem(TOK_SEEN_KEY) || "null"); } catch (e) { return null; } }
+  function tokMarkSeen() {
+    var m = {};
+    ((S.tokens && S.tokens.stations) || []).forEach(function (r) { m[r.station] = r.runs || 0; });
+    try { localStorage.setItem(TOK_SEEN_KEY, JSON.stringify(m)); } catch (e) { }
+  }
+  function tokUnread() {
+    var seen = tokSeen(); if (!seen) return 0;
+    var n = 0;
+    ((S.tokens && S.tokens.stations) || []).forEach(function (r) {
+      var s = seen[r.station];
+      if (s == null || (r.runs || 0) > s) n++;
+    });
+    return n;
+  }
+  function feedUnread() { var seen = tlSeen(); return mineEvs().filter(function (e) { return (e.id || 0) > seen; }).length; }
+  function pushUnread() {
+    var f = $("#office-frame"); if (!f || !f.contentWindow) return;
+    try { f.contentWindow.postMessage({ type: "bx-unread", feed: feedUnread(), usage: tokUnread() }, "*"); } catch (e) { }
+  }
+  var officeFrame = $("#office-frame");
+  if (officeFrame) officeFrame.addEventListener("load", function () { pushUnread(); });
+
+  var S = { meta: null, stations: [], todo: null, events: [], tokens: null, doctor: null, alive: false, stamp: "—", onlyMe: false };
+  var TL_N = 12;
+  var EV = [];
+
+
+
+  /* ---------- 动态 ---------- */
+  function evHtml(e) {
+    return '<div class="ev" title="' + esc(e.kind || "") + '">' +
+      '<span class="t num">' + esc(hm(e.ts)) + "</span>" +
+      '<span class="who tx">' + esc(e.station || t("home.stationFallback")) + "</span>" +
+      '<span class="tx" title="' + esc(e.text || "") + '">' + esc(e.text || "") + "</span></div>";
+  }
+  function mineEvs() { return EV.filter(isMine); }
+  function tlOpen() { var el = $("#pnl-tl"); return !!(el && el.classList.contains("open")); }
+  function renderTL() {
+    var box = $("#tl");
+    var list = S.onlyMe ? mineEvs() : EV;
+    if (tlOpen()) tlMarkSeen();   /* 面板开着就算看过了 */
+    var seen = tlSeen(), unread = mineEvs().filter(function (e) { return (e.id || 0) > seen; }).length;
+    $("#tl-more").textContent = t("home.allCount", { n: EV.length });
+    pushUnread();   /* 未读数报给画布（动态按钮右上角的红点） */
+    $("#tl-note").textContent = S.onlyMe ? t("home.feedMineCount", { n: list.length }) :
+      t("home.feedRecent", { n: EV.length, m: TL_N });
+    if (!EV.length) {
+      box.innerHTML = '<div class="empty">' + esc(t("home.feedEmpty")) + "</div>";
+      return;
+    }
+    if (!list.length) {
+      box.innerHTML = '<div class="empty">' + esc(t("home.mineEmpty")) + "</div>";
+      return;
+    }
+    box.innerHTML = list.slice(0, S.onlyMe ? EV.length : TL_N).map(evHtml).join("");
+  }
+  $("#only-me").onchange = function () { S.onlyMe = this.checked; renderTL(); };
+  $("#tl-more").onclick = function () {
+    var list = S.onlyMe ? mineEvs() : EV;
+    drawer(t("home.drawerFeedTitle", { n: list.length }),
+      t("home.drawerFeedNote", { n: EV.length }) + (S.onlyMe ? t("home.drawerFeedMine") : t("home.drawerFeedAll")),
+      (list.length ? list.map(evHtml).join("") : '<div class="empty">' + esc(t("home.drawerEmpty")) + "</div>"));
+  };
+
+  /* ---------- 实测 token ---------- */
+  function costEst(v) { return v == null ? t("home.noPriceValue") : "$" + v.toFixed(2); }
+  function quotaCell(q) {
+    if (!q) { return ""; }
+    if (!q.ok) { return '<span class="qerr">' + esc(q.error_kind || t("home.queryFail")) + "</span>"; }
+    var names = { h5: t("home.quota5h"), week: t("home.quotaWeek"), month: t("home.quotaMonth") };
+    return ["h5", "week", "month"].map(function (k) {
+      var w = (q.windows || {})[k];
+      if (!w || w.pct == null) { return ""; }
+      var txt = (q.label || names[k]) + t("home.quotaUsed", { n: Math.round(w.pct) }) +
+        (w.reset ? t("home.quotaReset", { t: when(w.reset) }) : "");
+      var red = w.pct >= 90 ? " red" : "", wid = Math.min(100, Math.round(w.pct));
+      return '<span class="qbar' + red + '" title="' + esc(txt) + '"><i style="width:' + wid + '%"></i></span>';
+    }).join("");
+  }
+  function renderTok() {
+    var d = S.tokens, box = $("#tok");
+    if (!d) { box.innerHTML = '<div class="empty">' + esc(t("home.readingUsage")) + "</div>"; return; }
+    var rows = (d.stations || []).map(function (r) {
+      return "<tr><td>" + esc(r.station) + '</td><td class="num">' + num(r.tok_in) + "</td><td class='num'>" + num(r.tok_out) +
+        "</td><td class='num'>" + num(r.tok_cr) + "</td><td class='num'>" + num(r.tok_cw) +
+        "</td><td class='num'>" + (r.cost == null ? t("home.noPrice") : esc(r.cost)) +
+        "</td><td class='num'>" + esc(costEst(r.cost_est)) + "</td><td>" + quotaCell(r.quota) + "</td></tr>";
+    });
+    (d.not_counted || []).forEach(function (sid) {
+      rows.push('<tr><td>' + esc(sid) + "</td><td colspan='8' class='dim'>" + esc(t("home.notCounted")) + "</td></tr>");
+    });
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty">' + esc(t("home.usageEmpty")) + "</div>";
+    } else {
+      box.innerHTML = '<div style="overflow-x:auto"><table class="table table-sm tk"><thead><tr><th>' + esc(t("home.headStation")) +
+        "</th><th>" + esc(t("home.headIn")) + "</th><th>" + esc(t("home.headOut")) + "</th>" +
+        "<th>" + esc(t("home.headCacheIn")) + "</th><th>" + esc(t("home.headCacheOut")) + "</th><th>" + esc(t("home.headRuns")) +
+        "</th><th>" + esc(t("home.headCost")) + "</th>" +
+        '<th>' + esc(t("home.headEst")) + '<span class="th-note">' + esc(t("home.headEstNote")) + "</span></th><th>" +
+        esc(t("home.headLeft")) + "</th></tr></thead><tbody>" +
+        rows.join("") + "</tbody></table></div>";
+    }
+    $("#tok-foot").textContent = rows.length ? (d.note || "") + " " + t("home.usageSince", { t: when(d.since) }) : "";
+    pushUnread();   /* 用量有更新 → 画布上「用量」按钮的红点跟着变 */
+  }
+
+  /* ---------- 连接状态 ---------- */
+  function renderDoc() {
+    var d = S.doctor, box = $("#conn");
+    if (!d) { box.innerHTML = '<div class="empty">' + esc(t("home.readingCheck")) + "</div>"; return; }
+    var s = d.summary || {};
+    var head = '<div class="ph"><span class="sw w-run">' + esc(t("home.docPass", { n: num(s.ok) })) + "</span>" +
+      '<span class="sw ' + (s.fail ? "w-fail" : "dim") + '">' + esc(t("home.docFail", { n: num(s.fail) })) + "</span>" +
+      '<span class="sw w-idle">' + esc(t("home.docSkip", { n: num(s.skip) })) + "</span></div>";
+    var bad = (d.checks || []).filter(function (c) { return c.ok === false; });
+    if (!bad.length) {
+      box.innerHTML = head + '<div class="empty">' + esc(t("home.docAllGood")) + "</div>";
+      return;
+    }
+    box.innerHTML = head + bad.map(function (c) {
+      return '<div class="chk"><div class="lb">' + esc(c.label) + "</div>" +
+        '<div class="dt">' + esc(c.detail || "") + "</div>" +
+        (c.fix ? '<div class="fx">' + esc(t("home.docFix", { x: c.fix })) + "</div>" : "") + "</div>";
+    }).join("");
+  }
+  $("#doc-re").onclick = function () { S.doctor = null; renderDoc(); loadDoctor(); };
+  /* 语言换了：面板里的字重画一遍（顶栏自己管，静态文案由 i18n.js 换） */
+  addEventListener("bx-lang-changed", function () { renderTL(); renderTok(); renderDoc(); });
+
+  /* ---------- 抽屉：叫醒首领 ---------- */
+  function drawer(title, note, html) {
+    $("#dr-title").textContent = title;
+    $("#dr-note").innerHTML = note || "";
+    $("#dr-html").innerHTML = html || "";
+    $("#drawer").classList.add("show");
+    var b = $("#backdrop"); b.style.display = "block"; setTimeout(function () { b.classList.add("show"); }, 10);
+    $("#drawer .offcanvas-body").scrollTop = 0;
+  }
+  function closeDrawer() {
+    $("#drawer").classList.remove("show");
+    var b = $("#backdrop"); b.classList.remove("show"); b.style.display = "none";
+  }
+  $("#backdrop").onclick = closeDrawer;
+  $("#dr-close").onclick = closeDrawer;
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeDrawer(); setPanel(""); } });
+
+  function summonHtml(sid, d) {
+    if (!d || d.error) {
+      return '<div class="empty">' + esc(t("home.summonReadFail", { why: (d && d.error) || t("home.summonNoReturn") })) + "</div>";
+    }
+    var st = (S.stations || []).filter(function (x) { return x.id === sid; })[0] || {};
+    var kv = [
+      [t("home.kvStation"), esc(d.station || sid)],
+      [t("home.kvRole"), esc(roleWord(st.role))]
+    ];
+    /* 首领写它在哪个 AI 软件；打工猫只写接活方式（用 API key 自动跑 / 会话模式） */
+    if (st.role === "leader") {
+      kv.push([t("home.kvClient"), esc(st.client ? clientLabel(st.client) : t("home.clientGeneric"))]);
+    }
+    kv.push([t("home.kvHow"), esc(runnerWord(d.runner))]);
+    kv.push(
+      [t("home.kvState"), esc(st.word || "–") + (st.minutes != null ? " " + t("home.minutes", { n: st.minutes }) : "")],
+      [t("home.kvTodo"), num(st.open) + " " + t("home.todoCount")],
+      [t("home.kvSeen"), esc(when(st.last_seen))]
+    );
+    if (d.every_min != null) kv.push([t("home.kvEvery"), t("home.everyMin", { n: num(d.every_min) })]);
+    if (d.every_min != null) {
+      kv.push([t("home.kvLastRun"), st.last_scheduled_at ? esc(when(st.last_scheduled_at)) : t("home.kvNever")]);
+    }
+    var promptBox = d.prompt
+      ? "<pre>" + esc(d.prompt) + '</pre><div class="ph"><button type="button" class="btn-lite p" id="cpPrompt">' +
+        esc(t("home.copyPrompt")) + "</button></div>"
+      : '<div class="empty">' + esc(t("home.noPaste")) + "</div>";
+    var snipBox = d.snippet
+      ? "<pre>" + esc(d.snippet) + '</pre><div class="ph"><button type="button" class="btn-lite p" id="cpSnip">' +
+        esc(t("home.copySnippet")) + "</button></div>" +
+        (d.mcp_menu_hint ? '<div class="hint">' + esc(d.mcp_menu_hint) + "</div>" : "")
+      : "";
+    var steps = (d.steps || []).length
+      ? "<ol>" + d.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>"
+      : "";
+    return '<table class="table kv mb-0"><tbody>' + kv.map(function (p) {
+      return "<tr><th>" + esc(p[0]) + "</th><td>" + p[1] + "</td></tr>";
+    }).join("") + "</tbody></table>" +
+      "<h4>" + esc(t("home.where")) + "</h4><div>" + esc(d.where || "—") + "</div>" +
+      "<h4>" + esc(t("home.what")) + "</h4>" + promptBox +
+      (snipBox ? "<h4>" + esc(t("home.snippet")) + "</h4>" + snipBox : "") +
+      (steps ? "<h4>" + esc(t("home.steps")) + "</h4>" + steps : "");
+  }
+  function openSummon(sid) {
+    if (!sid) {
+      drawer(t("home.summonTitle"), "", '<div class="empty">' + esc(t("home.summonNoStation")) + "</div>");
+      return;
+    }
+    drawer(t("home.summonTitleFor", { sid: sid }), t("home.summonReading"), "");
+    api("/api/summon/" + encodeURIComponent(sid) + langParam()).then(function (r) {
+      drawer(t("home.summonTitleFor", { sid: sid }), "",
+        summonHtml(sid, r.ok ? r.data : { error: r.error || t("home.summonDown") }));
+      var cp = $("#cpPrompt"); if (cp) cp.onclick = function () { copy(r.data.prompt || "", this); };
+      var cs = $("#cpSnip"); if (cs) cs.onclick = function () { copy(r.data.snippet || "", this); };
+    });
+  }
+
+  /* ---------- 悬浮面板：从停靠条的按钮下方弹出；开关记在浏览器里（bx-pnl），刷新保持打开 ---------- */
+  var PNL_KEY = "bx-pnl";
+  /* 浮窗贴在按钮下面：先量按钮在哪、浮窗多大，再定 left / top（放不下就往上顶，别顶出屏幕）。
+     入口在画布里（动态 / 用量按钮）→ 没按钮可量时，就贴着办公室画面右上角 */
+  function pnlAnchor(p) {
+    var w = document.getElementById("office-wrap");
+    if (w) { var r = w.getBoundingClientRect(); return { left: r.right - 12, top: r.top + 8 }; }
+    return { left: innerWidth - 24, top: 80 };
+  }
+  var PNL_ANCHOR = null;    /* 画布里点了「动态 / 用量」→ 画布把按钮在屏幕上的位置报过来，浮窗从按钮右边弹出来 */
+  function anchorFromCanvas(rect) {
+    var f = $("#office-frame"); if (!f || !rect) return null;
+    var r = f.getBoundingClientRect();
+    return { left: r.left + rect.x + rect.w, top: r.top + rect.y };
+  }
+  function placePnl(p) {
+    var el = $("#pnl-" + p); if (!el || !el.classList.contains("open")) return;
+    var a = PNL_ANCHOR || pnlAnchor(p);
+    var w = el.offsetWidth, h = el.offsetHeight, pad = 8;
+    el.style.left = Math.max(pad, Math.min(a.left, innerWidth - w - pad)) + "px";
+    el.style.top = Math.max(pad, Math.min(a.top, innerHeight - h - pad)) + "px";
+  }
+  function setPanel(p) {
+    document.querySelectorAll(".pnl").forEach(function (x) { x.classList.toggle("open", !!p && x.id === "pnl-" + p); });
+    if (p) placePnl(p);
+    try { localStorage.setItem(PNL_KEY, p || ""); } catch (e) { }
+    if (p === "conn" && !S.doctor) loadDoctor();
+    if (p === "tl") { tlMarkSeen(); renderTL(); }   /* 点开动态 = 看过了，徽标清零 */
+    if (p === "tok") { tokMarkSeen(); pushUnread(); }   /* 点开用量 = 看过了，红点清零 */
+  }
+  document.querySelectorAll(".pnl-x").forEach(function (b) {   /* 浮窗的 × 关面板（开面板的入口在画布里） */
+    b.onclick = function () { setPanel(""); };
+  });
+  try { var p0 = localStorage.getItem(PNL_KEY); if (p0) setPanel(p0); } catch (e) { }
+  addEventListener("resize", function () {                       /* 窗口变了浮窗跟着挪，别飘到屏幕外 */
+    var cur = (document.querySelector(".pnl.open") || {}).id;
+    if (cur) placePnl(cur.replace(/^pnl-/, ""));
+  });
+
+  addEventListener("message", function (e) {          /* 画布里点了「动态」「用量」→ 开同名面板（再点一次收起） */
+    var d = e.data || {};
+    if (d.type === "bx-open-panel") {
+      var p = d.panel === "feed" ? "tl" : d.panel === "usage" ? "tok" : d.panel;
+      if (p === "tl" || p === "tok") {
+        var cur = (document.querySelector(".pnl.open") || {}).id;
+        PNL_ANCHOR = anchorFromCanvas(d.rect);
+        setPanel(cur === "pnl-" + p ? "" : p);
+      }
+    } else if (d.type === "bx-close-panel") setPanel("");   /* 焦点在画布里时按 Esc（画布转过来的） */
+    else if (d.type === "bx-anim-ready") pushUnread();   /* 画布起来了，把未读数补给它 */
+  });
+
+
+  /* 办公室昼夜：档位在 iframe 里办公室画布上的开关选（自动 / 清晨 / 白天 / 傍晚 / 夜晚），
+     首页只收它的回报：按它报的底色改办公室外框的背景 */
+  addEventListener("message", function (e) {
+    var d = e.data || {};
+    if (d.type !== "bx-office-theme") { return; }
+    var w = $("#office-wrap"); if (w && d.bg) { w.style.background = d.bg; }
+  });
+
+  /* 顶栏上的圆点 = 连接状态；办公室提示条「叫醒首领」= 上岗抽屉（bx-summon 事件，首页接住） */
+  addEventListener("bx-core-click", function (e) { e.preventDefault(); setPanel("conn"); });
+  addEventListener("bx-summon", function (e) { e.preventDefault(); openSummon(e.detail); });
+  (function () { var m = /^#summon=(.+)$/.exec(location.hash); if (m) { setTimeout(function () { openSummon(decodeURIComponent(m[1])); }, 300); } })();
+
+  /* 上次退出时中断的卡：打开时问用户「接着做 / 交给首领决定 / 先不管」 */
+  function pxWin(o) {
+    var host = document.getElementById("bx-resume");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "bx-resume";
+      document.body.appendChild(host);
+    }
+    host.innerHTML = '<div class="pxw-mask"></div>';
+    var box = document.createElement("div");
+    box.className = "pxw";
+    box.setAttribute("role", "dialog");
+    box.innerHTML =
+      '<div class="pxw-title">' + esc(o.title) + "</div>" +
+      '<div class="pxw-body">' + (o.body || "") + "</div>" +
+      '<div class="pxw-foot"><span class="sp">' + esc(o.foot || "") + "</span>" +
+      (o.buttons || []).map(function (b, i) {
+        return '<button type="button" class="pxb' + (b.main ? " main" : "") + '" data-b="' + i + '">' + esc(b.text) + "</button>";
+      }).join("") + "</div>";
+    host.appendChild(box);
+    host.classList.add("on");
+    (o.buttons || []).forEach(function (b, i) {
+      var btn = box.querySelector('[data-b="' + i + '"]');
+      if (btn) {
+        btn.onclick = function () {
+          host.classList.remove("on");
+          host.innerHTML = "";
+          if (b.on) { b.on(); }
+        };
+      }
+    });
+    return box;
+  }
+  function postJSON(p, body) {
+    return fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .catch(function () { return {}; });
+  }
+  function askInterrupted() {
+    return api("/api/interrupted").then(function (r) {
+      if (!r.ok) return;
+      var cards = r.data.cards || [];
+      if (!cards.length) return;
+      var body = cards.map(function (c) {
+        return '<div class="card"><h3>' + esc(c.task_id) + "</h3><p>" + esc(c.title || "") + "</p></div>";
+      }).join("");
+      pxWin({
+        title: t("home.resumeTitle", { n: cards.length }),
+        body: body + '<p class="hint">' + esc(t("home.resumeHint")) + "</p>",
+        foot: t("home.resumeFoot"),
+        buttons: [
+          { text: t("home.resumeAll"), main: true, on: function () { postJSON("/api/interrupted/resume", { all: true }); } },
+          { text: t("home.resumeToLeader"), on: function () { postJSON("/api/interrupted/dismiss", { all: true, to_leader: true }); } },
+          { text: t("home.resumeIgnore"), on: function () { postJSON("/api/interrupted/dismiss", { all: true }); } }
+        ]
+      });
+    });
+  }
+  askInterrupted();
+
+  /* ---------- 轮询 ---------- */
+  function startPolling() {
+    pollFast(); pollSlow();
+    setInterval(pollFast, 5000);
+    setInterval(pollSlow, 15000);
+  }
+  function loadDoctor() { api("/api/doctor").then(function (r) { if (r.ok) { S.doctor = r.data; renderDoc(); } }); }
+  function pollFast() {
+    return Promise.all([api("/api/health"), api("/api/meta"), api("/api/stations"), api("/api/todo")]).then(function (rs) {
+      var ok = false;
+      rs.forEach(function (r) { if (r.ok) ok = true; });
+      S.alive = ok;
+      if (rs[0].ok && rs[1].ok) { S.meta = rs[1].data; }
+      if (rs[2].ok && rs[2].data) { S.stations = rs[2].data.stations || []; }
+      if (rs[3].ok && rs[3].data) { S.todo = rs[3].data; }
+      S.stamp = hm(new Date().toISOString());
+    });
+  }
+  function pollSlow() {
+    return Promise.all([api("/api/timeline?limit=100"), api("/api/tokens")]).then(function (rs) {
+      if (rs[0].ok && rs[0].data) { EV = rs[0].data.events || []; renderTL(); }
+      if (rs[1].ok && rs[1].data) { S.tokens = rs[1].data; renderTok(); }
+    });
+  }
+})();
+</script></body></html>

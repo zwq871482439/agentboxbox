@@ -1,0 +1,66 @@
+<!-- 旧的 /onboard 上岗向导页（1-2-3 向导）已经拆了：上岗在首页办公室上弹像素窗口做。
+     这个地址只留一个跳转：回到首页（/），首页自己会看 /api/onboard/state 决定要不要进上岗。 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="doc.title">回到办公室 · 猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<style>
+  :root{--bg:#15151e;--line:#262632;--ink:#ececf0;--dim:#8a8a97}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;
+    font:14px/1.7 "Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif}
+  main{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+  .box{max-width:520px;border:2px solid var(--line);background:#1c1c27;padding:22px 24px}
+  h1{font-size:18px;margin:0 0 10px}
+  p{color:var(--dim);margin:0 0 14px}
+  a{color:#fff}
+</style>
+<script src="/static/i18n.js"></script>
+<script>
+  /* 这个页只是个跳转，文案自己带，不拉单独的词表文件 */
+  window.BXi18n.register({
+    zh: {
+      doc: { title: "回到办公室 · 猫猫盒子" },
+      ob: {
+        h1: "上岗流程搬到首页了",
+        text: "这个地址上的 1-2-3 向导已经不用了：现在打开首页办公室，首领和打工猫的招募都在办公室上面的像素窗口里一步步做。正在过去…",
+        back: "回首页开始上岗",
+      },
+    },
+    en: {
+      doc: { title: "Back to the office · agentboxbox" },
+      ob: {
+        h1: "The setup moved to the home page",
+        text: "The 1-2-3 wizard on this address is gone: open the office on the home page and hire the leader and the worker cats "
+          + "in the pixel window there, step by step. Going there…",
+        back: "Back to the home page",
+      },
+    },
+  });
+  window.BXi18n.apply(document);
+</script>
+<script src="/static/topbar.js" defer></script>
+</head>
+<body>
+<header id="bx-top"></header>
+<main>
+  <div class="box">
+    <h1 data-i18n="ob.h1">上岗流程搬到首页了</h1>
+    <p data-i18n="ob.text">这个地址上的 1-2-3 向导已经不用了：现在打开首页办公室，首领和打工猫的招募都在办公室上面的像素窗口里
+      一步步做。正在过去…</p>
+    <p><a href="/" data-i18n="ob.back">回首页开始上岗</a></p>
+  </div>
+</main>
+<script>
+  /* 记着从哪来的：首页拿到就知道这次是走「从头上岗」还是「继续上一步」 */
+  try { sessionStorage.setItem("bx-onboard-entry", location.hash || ""); } catch (e) {}
+  location.replace("/" + (location.hash || ""));
+</script>
+</body>
+</html>

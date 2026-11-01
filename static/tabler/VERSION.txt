@@ -1,0 +1,1 @@
+1.6.1 from npm @tabler/core, MIT (only tabler.min.css is used)

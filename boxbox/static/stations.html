@@ -1,0 +1,218 @@
+<!-- 工位页 (/stations)：挂绳工牌一列 + 查看详情抽屉 + 工位编辑浮层。
+     浅色主题（米白底、深色字），顶栏仍是共用 topbar.js 的深色；页头行收下「← 办公室」按钮（不压标题）。 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="doc.title">工位 · 猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/stations.css">
+<script src="/static/i18n.js"></script>
+<script src="/static/i18n-stations.js"></script>
+<script src="/static/topbar.js" defer></script>
+<script src="/static/providers.js"></script>
+<script src="/static/cats.js"></script><!-- 画猫代码只有一份：核心从 office/build/cats.js 发 -->
+</head>
+<body>
+<header id="bx-top"></header>
+<div class="wrap">
+
+  <div class="pagehead">
+    <div class="head-l">
+      <span class="backhome" id="backhome"></span><!-- topbar.js 的「← 办公室」搬到这里，不压标题 -->
+      <div>
+        <h1 data-i18n="st.h1">工位</h1>
+        <p class="sub" id="head-count">首领 0 · 打工猫 0/6</p>
+      </div>
+    </div>
+    <div class="headbtns">
+      <button class="btn" id="reload" data-i18n="st.reload">重新读取</button>
+      <a class="btn" href="/#recruit" data-i18n="st.redo" data-i18n-title="st.redoTitle">重新走一遍上岗</a>
+    </div>
+  </div>
+
+  <div class="msg fail" id="table-msg" hidden></div>
+
+  <div class="col" id="badges"><div class="empty" data-i18n="st.loading">正在读取…</div></div>
+
+  <div class="lonely" id="lonely" hidden>
+    <span data-i18n="st.lonely">办公室有点冷清，去招个打工猫吧</span>
+    <button class="btn pri" id="btn-lonely" data-i18n="st.goRecruit">去招募</button>
+  </div>
+
+  <button class="recruit" id="btn-new" data-i18n-title="st.recruitTitle">＋ 招募打工猫猫（0/6）</button>
+
+  <p class="foot" data-i18n="st.foot">打工猫最多 6 只（A 到 F 位）。删掉正在干活的猫会中断它那张卡，删之前会先问你。同一个服务商想同时多跑几张，就多招几只猫（或者点工牌上的「复制」）。参数和自检在「设置」。</p>
+</div>
+
+<!-- 工位编辑浮层：新增 / 编辑工位（Pi 部分从服务商清单选型，选择器和上岗那套复用） -->
+<div class="modal" id="formBox" hidden>
+  <div class="mbox">
+    <div class="mhead"><h2 id="formTitle" data-i18n="st.formNew">新增 / 编辑工位</h2>
+      <button class="mx" id="btn-x" type="button" data-i18n="st.close">关掉</button></div>
+    <div class="mbody">
+      <div class="grid">
+        <div class="f"><label data-i18n="st.labelId">工位名</label><input id="f-id" maxlength="24" data-i18n-placeholder="st.phId" placeholder="例如 A"></div>
+        <div class="f" id="f-mode-row"><label data-i18n="st.labelMode">接活方式</label>
+          <select id="f-mode">
+            <option value="pi" data-i18n="st.modePi">用 API key 自动跑</option>
+            <option value="sched" data-i18n="st.modeSched">会话模式</option>
+          </select>
+          <p class="hint" id="f-mode-hint" data-i18n="st.modePiDesc">盒子自己拉起打工猫（用的是 Pi），派活就开工。服务商、密钥、模型在下面填。</p></div>
+        <div class="f" id="f-cwd-row"><label data-i18n="st.labelCwd">工作目录（可不填）</label>
+          <input id="f-cwd" data-i18n-placeholder="st.phCwd" placeholder="不填：卡上指定；都没写用 data\work\工位名"></div>
+        <div class="f" id="f-enabled-row"><label>&nbsp;</label><div class="chk"><input type="checkbox" id="f-enabled" checked>
+            <span data-i18n="st.enabled">启用这个工位</span></div></div>
+      </div>
+
+      <!-- 换猫的样子：和上岗招募同一个选猫框；王冠由核心给首领补，这里不让选 -->
+      <div class="sub">
+        <h3 data-i18n="st.lookTitle">猫的样子</h3>
+        <div class="lookrow">
+          <button class="btn larrow" id="lk-prev" type="button" data-i18n-title="st.prevCat">◀</button>
+          <div class="lkbox"><canvas id="lk-cat" width="96" height="96"></canvas>
+            <div class="lkcnt" id="lk-cnt">8 只里选 · -/8</div></div>
+          <button class="btn larrow" id="lk-next" type="button" data-i18n-title="st.nextCat">▶</button>
+          <div class="lkacc">
+            <div class="f"><label data-i18n="st.labelHead">帽子</label><select id="lk-head"><option value="" data-i18n="st.none">无</option></select></div>
+            <div class="f"><label data-i18n="st.labelFace">脸</label><select id="lk-face"><option value="" data-i18n="st.none">无</option></select></div>
+            <div class="f"><label data-i18n="st.labelNeck">脖子</label><select id="lk-neck"><option value="" data-i18n="st.none">无</option></select></div>
+            <div class="f"><label data-i18n="st.labelEars">耳朵</label><select id="lk-ears"><option value="" data-i18n="st.none">无</option></select></div>
+            <div class="f"><label data-i18n="st.labelBody">身体</label><select id="lk-body"><option value="" data-i18n="st.none">无</option></select></div>
+          </div>
+        </div>
+        <p class="hint" id="lk-hint" data-i18n="st.lookHint">王冠是首领的，不用选，保存时自动戴上。</p>
+      </div>
+
+      <div class="sub" id="piBox" hidden>
+        <h3 data-i18n="st.piTitle">Pi 接口配置</h3>
+        <div class="grid">
+          <div class="f"><label data-i18n="st.provLabel">服务商（可输入搜索）</label><div id="provPick"></div>
+            <p class="hint" style="margin:4px 0 0" data-i18n="st.provHint">从清单选一家，自动填右边的接口地址和接口类型；清单里没有就选「手动填写」自己填。</p></div>
+          <div class="f"><label data-i18n="st.modelLabel">模型（可输入搜索）</label><div id="modelPick"></div>
+            <p class="hint" style="margin:4px 0 0" data-i18n="st.modelHint">选了模型自动填模型名、上下文窗口、最大输出。</p></div>
+        </div>
+        <div class="grid">
+          <div class="f"><label data-i18n="st.baseLabel">接口地址</label>
+            <input id="p-base" data-i18n-placeholder="st.basePh" placeholder="例如 api.example.com/coding"></div>
+          <div class="f"><label data-i18n="st.apiLabel">接口类型</label><select id="p-api">
+            <option value="anthropic-messages">anthropic-messages</option>
+            <option value="openai-completions">openai-completions</option>
+            <option value="openai-responses">openai-responses</option>
+            <option value="google-generative-ai">google-generative-ai</option>
+          </select></div>
+          <div class="f"><label data-i18n="st.keyLabel">密钥</label>
+            <input id="p-key" type="password" autocomplete="off" data-i18n-placeholder="st.keyPh" placeholder="粘贴这家接口的密钥"></div>
+          <div class="f"><label data-i18n="st.modelNameLabel">模型</label>
+            <input id="p-model" data-i18n-placeholder="st.modelPh" placeholder="例如 kimi-for-coding"></div>
+          <div class="f"><label data-i18n="st.ctxLabel">上下文窗口</label><input id="p-ctx" type="number" min="1" value="200000"></div>
+          <div class="f"><label data-i18n="st.maxLabel">最大输出</label><input id="p-max" type="number" min="1" value="32000"></div>
+        </div>
+        <p class="hint" id="p-key-hint" data-i18n="st.keyHint">密钥只存在这台电脑的 data/secrets.json 里，不会出现在日志和任何接口返回里。留空 = 不改。</p>
+        <div style="margin-top:8px"><button class="btn" id="btn-picheck" data-i18n="st.testConn">测试连接</button></div>
+        <div class="msg" id="picheck-msg" hidden></div>
+
+        <div class="sub">
+          <h3 data-i18n="st.quotaTitle">查余量（套餐还剩多少）</h3>
+          <div class="grid">
+            <div class="f"><label data-i18n="st.quotaLabel">查余量</label><select id="q-mode">
+              <option value="off" data-i18n="st.quotaOff">关</option>
+              <option value="after_run" data-i18n="st.quotaAfter">每轮跑完查一次</option>
+              <option value="interval" data-i18n="st.quotaInterval">每 N 分钟查一次</option>
+            </select></div>
+            <div class="f" id="q-every-f" hidden><label data-i18n="st.everyMin">间隔分钟</label><input id="q-every" type="number" min="1" value="30"></div>
+            <div class="f"><label data-i18n="st.adapterLabel">适配器（按接口地址自动建议）</label><select id="q-adapter">
+              <option value="kimi_code">Kimi Code</option>
+              <option value="glm_coding_plan">智谱 GLM Coding Plan</option>
+              <option value="minimax_token_plan">MiniMax Token Plan</option>
+              <option value="custom" data-i18n="st.adapterCustom">自定义</option>
+            </select></div>
+          </div>
+          <div class="grid" id="q-custom" hidden>
+            <div class="f"><label data-i18n="st.urlLabel">查询地址</label>
+              <input id="q-url" data-i18n-placeholder="st.urlPh" placeholder="例如 https://服务商地址/usage"></div>
+            <div class="f"><label data-i18n="st.authLabel">认证方式</label><select id="q-auth">
+              <option value="bearer" data-i18n="st.authBearer">key 前面加 Bearer</option>
+              <option value="raw" data-i18n="st.authRaw">key 直接放请求头</option>
+              <option value="none" data-i18n="st.authNone">不带 key</option>
+            </select></div>
+            <div class="f"><label data-i18n="st.pctLabel">已用百分比路径</label>
+              <input id="q-pct" data-i18n-placeholder="st.pctPh" placeholder="返回 JSON 里的路径，例如 data.used_pct"></div>
+            <div class="f"><label data-i18n="st.remLabel">剩余百分比路径（可选）</label>
+              <input id="q-rem" data-i18n-placeholder="st.remPh" placeholder="填了就按 100 减它算已用"></div>
+            <div class="f"><label data-i18n="st.resetLabel">重置时间路径（可选）</label>
+              <input id="q-reset" data-i18n-placeholder="st.resetPh" placeholder="例如 data.reset_at"></div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:10px;align-items:center">
+            <button class="btn" id="btn-quota" data-i18n="st.quotaNow">现在查一次</button>
+            <span class="msg" id="quota-msg" hidden style="margin-top:0"></span>
+          </div>
+          <p class="hint" data-i18n="st.quotaHint">查余量用这个工位的密钥，只在本机发请求；密钥不会写进日志和返回值。结果在看板和首页的「用量」里看。</p>
+        </div>
+      </div>
+
+      <div class="sub" id="schedBox" hidden>
+        <h3 data-i18n="st.schedTitle">会话模式</h3>
+        <div class="grid">
+          <div class="f"><label data-i18n="st.everyMin">间隔分钟</label><input id="s-every" type="number" min="5" value="30"></div>
+        </div>
+        <p class="hint" id="sched-hint" data-i18n="st.schedHint">你的 AI 软件每隔这么多分钟开一个新会话来领卡。指南在看板中点这个工位。</p>
+      </div>
+
+      <div class="sub">
+        <h3 data-i18n="st.costTitle">单价（每百万 token，可空）</h3>
+        <div class="grid">
+          <div class="f"><label data-i18n="st.costIn">输入</label><input id="c-in" type="number" min="0" step="0.01" placeholder="例如 1"></div>
+          <div class="f"><label data-i18n="st.costOut">输出</label><input id="c-out" type="number" min="0" step="0.01" placeholder="例如 2"></div>
+        </div>
+        <p class="hint"><span data-i18n="st.costHint">两项都留空就不记单价。</span>
+          <button class="btn" id="btn-cost-reset" type="button" style="padding:2px 8px;font-size:12.5px" data-i18n="st.costReset">重置</button></p>
+      </div>
+
+      <div class="errs" id="errs"></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn pri" id="btn-save" data-i18n="st.save">保存</button>
+        <button class="btn" id="btn-cancel" data-i18n="st.cancel">取消</button>
+        <span class="msg" id="form-msg" hidden></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 删除确认框（页面内，像素风） -->
+<div class="dlg" id="delDlg" hidden>
+  <div class="box">
+    <h3 data-i18n="st.delTitle2">删掉工位</h3>
+    <p id="del-text"></p>
+    <div class="btns">
+      <button class="btn" id="del-no" data-i18n="st.cancel">取消</button>
+      <button class="btn danger" id="del-yes" data-i18n="st.yes">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 查看详情抽屉（只读；改东西走「修改配置」） -->
+<div class="drawer-back" id="drawerBack" hidden></div>
+<aside class="drawer" id="drawer" hidden>
+  <div class="dhead">
+    <canvas class="avatar" id="d-cat" width="32" height="32"></canvas>
+    <div class="dt"><h2 id="d-name">–</h2><p id="d-sub">–</p></div>
+    <span class="sp"></span>
+    <button class="btn" id="d-close" type="button" data-i18n="st.close">关掉</button>
+  </div>
+  <div id="d-body"><div class="dsec"><p class="hint" data-i18n="st.drawerLoading">正在读详情…</p></div></div>
+  <div class="dnote">
+    <span data-i18n="st.drawerNote">抽屉只看不动手，要改配置点右边。</span>
+    <button class="btn" id="d-edit" type="button" data-i18n="st.editCfg">修改配置</button>
+  </div>
+</aside>
+
+<textarea class="fallback" id="copy-fallback" hidden aria-label="复制用文本框"></textarea>
+
+<script src="/static/stations.js"></script>
+<script src="/static/stations-drawer.js"></script>
+</body>
+</html>

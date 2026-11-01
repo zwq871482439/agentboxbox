@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: 取源码
+        uses: actions/checkout@v4
+
+      - name: 装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pystray pywebview pytest
+
+      - name: 跑单元测试
+        run: python -m pytest -q tests
+
+      - name: 重算第三方许可清单
+        # 打包机装的包和开发机不一定一样，build_exe.ps1 会先核对清单是不是最新
+        run: python packaging/licenses.py
+
+      - name: 打 exe
+        shell: pwsh
+        run: ./packaging/build_exe.ps1
+
+      - name: 算 sha256、挑发布说明
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "dist 里没有 exe" }
+          $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          "$sha  $($exe.Name)" | Out-File -Encoding ascii "dist/$($exe.Name).sha256"
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $notes = "docs/release-$ver.md"
+          if (-not (Test-Path $notes)) {
+            $notes = (Get-ChildItem docs -Filter "release-*.md" | Sort-Object Name | Select-Object -Last 1).FullName
+          }
+          if (-not $notes) { throw "docs 里没有发布说明" }
+          Copy-Item $notes dist/release-notes.md
+
+      - name: 建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: dist/release-notes.md
+          files: |
+            dist/*.exe
+            dist/*.sha256
+            dist/release-notes.md

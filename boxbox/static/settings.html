@@ -1,0 +1,536 @@
+<!-- 设置页 (/settings)：核心参数、服务商清单、数据与隐私。工位增删改在「工位」页。 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="doc.title">设置 · 猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/pixelwin.css">
+<style>
+:root{
+  --bg:#14161a; --panel:#1b1e24; --line:#2b3037; --ink:#e5e8ea; --dim:#98a1ac;
+  --accent:#7aa8d8; --red:#d9776a; --amber:#cfa14a; --green:#6db391; --code:#22262d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+a{color:var(--accent)}
+h1,h2{margin:0;font-weight:600}
+code,pre,.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .brand{font-weight:600;letter-spacing:.5px}
+.top nav a{margin-right:14px;color:var(--dim);text-decoration:none}
+.top nav a.cur{color:var(--ink);font-weight:600}
+.wrap{max-width:960px;margin:22px auto;padding:0 18px 40px}
+.pagehead{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.pagehead h1{font-size:18px}
+.pagehead .sub{margin:2px 0 0;color:var(--dim);font-size:12.5px}
+.pagehead .headbtns{margin-left:auto;display:flex;align-items:center;gap:10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:16px}
+.hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.hd h1{font-size:16px}
+.hd .sp{flex:1}
+.hint{color:var(--dim);font-size:12.5px;margin:6px 0 0}
+.foot{color:var(--dim);font-size:12px;margin-top:8px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.sm{padding:2px 8px;font-size:12.5px}
+.btn.danger:hover{border-color:var(--red);color:var(--red)}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--dim);font-weight:600;white-space:nowrap}
+td.name{font-family:ui-monospace,Consolas,monospace}
+.empty{color:var(--dim);padding:10px 0}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:var(--code);color:var(--dim)}
+.word{font-weight:600;white-space:nowrap}
+.word.busy{color:var(--amber)}
+.word.off{color:var(--dim)}
+.word.ok{color:var(--green)}
+/* 表单 */
+details.form>summary{cursor:pointer;font-weight:600;list-style:revert}
+details.form[open]>summary{margin-bottom:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.f label{display:block;color:var(--dim);font-size:12.5px}
+.f input,.f select{display:block;width:100%;margin-top:3px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel);color:var(--ink);font:inherit}
+.f input:focus,.f select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.f input[readonly]{background:var(--code);color:var(--dim)}
+.f .chk{display:flex;align-items:center;gap:6px;margin-top:22px;color:var(--ink);font-size:13.5px}
+.f input[type=checkbox]{width:auto;margin:0}
+.sub{border-top:1px dashed var(--line);margin-top:14px;padding-top:12px}
+.sub h3{margin:0 0 8px;font-size:13.5px;font-weight:600}
+.errs{margin-top:10px}
+.errs div{color:var(--red);font-size:13px;padding:4px 0}
+.msg{margin-top:8px;font-size:13px;padding:7px 10px;border-radius:6px;background:var(--code)}
+.msg.ok{color:var(--green)}
+.msg.fail{color:var(--red)}
+.msg.info{color:var(--dim)}
+.prm{display:grid;grid-template-columns:150px 1fr 90px 36px;gap:6px 14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.prm:first-of-type{border-top:0}
+.prm .lb{font-weight:600}
+.prm .ds{color:var(--dim);font-size:12.5px}
+.prm input{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;text-align:right}
+.saved{color:var(--green);font-weight:600}
+.prm .u{font-size:12px;color:var(--dim);margin-left:6px}
+.prm input[type=checkbox]{width:auto;justify-self:end;margin:0;accent-color:var(--green)}
+.prm .times{grid-column:2 / span 3;display:flex;flex-wrap:wrap;gap:6px 18px}
+.prm .times label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim)}
+.prm .times input{width:auto;margin:0}
+#doctor .chk{display:grid;grid-template-columns:52px 220px 1fr;gap:4px 12px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px}
+#doctor .mk{font-size:12px;font-weight:600}#doctor .mk.ok{color:#3ddc84}#doctor .mk.fail{color:#ff6b6b}#doctor .mk.skip{color:var(--dim)}
+#doctor .dt{color:var(--dim);word-break:break-all}#doctor .fx{grid-column:2 / span 2;color:#f5b301;font-size:12.5px}
+/* 联网修复前的页面内确认框（像素风：方角、硬阴影，不用浏览器 alert） */
+.dlg{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
+.dlg[hidden]{display:none}
+.dlg .box{background:var(--panel);border:2px solid var(--line);border-radius:0;padding:16px 18px;max-width:430px;box-shadow:4px 4px 0 rgba(0,0,0,.6)}
+.dlg .box h3{margin:0 0 8px;font-size:14px}
+.dlg .box p{margin:0;color:var(--dim);font-size:13px;white-space:pre-wrap;word-break:break-all}
+.dlg .btns{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+[hidden]{display:none!important}
+/* 重置所有：方角、硬阴影，跟办公室像素框一个脾气，但不用大红块 */
+#resetBox{border-radius:0;border:2px solid #3a3f47;box-shadow:5px 5px 0 #0c0d10;background:#191c21}
+#resetBox h1{color:var(--amber)}
+#resetBox .say{color:var(--ink);font-size:13.5px;margin:6px 0 10px}
+.pxbar{display:flex;gap:3px;margin:10px 0 4px}
+.pxbar i{flex:1;height:16px;background:var(--code);border:2px solid #3a3f47;box-shadow:2px 2px 0 #0c0d10}
+.pxbar i.on{background:var(--green);border-color:var(--green)}
+.pxbar i.bad{background:var(--red);border-color:var(--red)}
+.pxname{color:var(--dim);font-size:12px}
+/* 数据和隐私：PRIVACY.md 原文，只认标题 / 列表 / 段落 / `代码` / **粗体** 这几种写法，[文字](文件) 只显示文字 */
+.privacy{font-size:13px;line-height:1.7;max-height:420px;overflow:auto;padding-right:6px}
+.privacy h2{font-size:14px;margin:14px 0 4px}
+.privacy h3{font-size:13.5px;margin:10px 0 4px}
+.privacy p{margin:4px 0}
+.privacy ul,.privacy ol{margin:4px 0;padding-left:22px}
+.privacy code{background:var(--code);padding:0 4px;border-radius:3px;font-size:12px}
+.privacy hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+/* 许可证 / 第三方声明的像素窗口：标题在左 × 在右，正文是整份全文（自带滚动条，不套 pxw 那种小 pre） */
+.bx-legalwin{position:fixed;inset:0;z-index:60;display:none}
+.bx-legalwin.on{display:block}
+.bx-legalbox:focus{outline:none}
+.pxw-title .t{margin-right:auto}
+.legal-body{max-height:calc(100vh - 220px);overflow:auto}
+.legal-body pre.legal-full{background:#fff;color:#2b1d12;border:0;box-shadow:none;margin:0;padding:0;
+  max-height:none;overflow:visible;
+  white-space:pre-wrap;word-break:break-word;font:13px/1.65 Consolas,"Cascadia Mono",monospace}
+.legal-body .empty{color:#4a3728;padding:8px 0}
+</style>
+<script src="/static/i18n.js"></script>
+<script src="/static/i18n-settings.js"></script>
+<script src="/static/topbar.js" defer></script>
+</head>
+<body>
+<header id="bx-top"></header>
+<div class="wrap">
+
+  <div class="pagehead">
+    <div>
+      <h1 data-i18n="st.h1">设置</h1>
+      <p class="sub" data-i18n="st.sub">常用参数、数据和隐私</p>
+    </div>
+    <div class="headbtns">
+      <span class="hint" id="set-msg" style="margin:0"></span>
+      <button class="btn pri" id="btn-setsave" data-i18n="st.save">保存</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="hd"><h1 data-i18n="st.params">盒子参数</h1><span class="sp"></span></div>
+    <div class="prm"><span class="lb" data-i18n="st.lang">语言</span>
+      <span class="ds" data-i18n="st.langDesc">界面、上岗话和办公室用哪种语言。选了就一直按这个来。</span>
+      <span style="display:flex;gap:8px;align-items:center;justify-content:flex-end">
+        <button type="button" class="btn" id="lang-zh" data-i18n="st.langZh">中文</button>
+        <button type="button" class="btn" id="lang-en" data-i18n="st.langEn">English</button></span></div>
+    <div class="prm"><span class="lb" data-i18n="st.wakeMin">多久提醒你去叫首领</span>
+      <span class="ds" data-i18n="st.wakeMinDesc">首领手上有待办、却这么多分钟没来看，别的猫会围过去冒问号，办公室顶上也会提示你去叫它。</span>
+      <input id="s-wake_min" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
+    <div class="prm"><span class="lb" data-i18n="st.ackTimeout">启动等待</span>
+      <span class="ds" data-i18n="st.ackTimeoutDesc">盒子自动启动一个工位后，最多等几秒启动器回一句「已启动」；超时了就当这张卡没送出去，不会自动重试，换不换工位由你定。</span>
+      <input id="s-ack_timeout_s" type="number" min="1"><span class="u" data-i18n="st.seconds">秒</span></div>
+    <div class="prm"><span class="lb" data-i18n="st.heartbeat">检查间隔</span>
+      <span class="ds" data-i18n="st.heartbeatDesc">盒子多久查一遍任务执行情况：工位进程还在不在、交没交付、要不要提醒你。不查 API key 余额。</span>
+      <input id="s-heartbeat_s" type="number" min="1"><span class="u" data-i18n="st.seconds">秒</span></div>
+    <div class="prm"><span class="lb" data-i18n="st.sceneBubbles">完成后首领冒气泡叫你看庆祝 / 复盘</span>
+      <span class="ds" data-i18n="st.sceneBubblesDesc">卡验收通过、同一目标的一批全部完成、或出了事故时，首领在办公室冒气泡邀请你看庆祝 / 开复盘，点了才演。不勾就只有办公室自己演，首领不邀请。</span>
+      <input id="s-scene_bubbles" type="checkbox" checked></div>
+    <div class="prm"><span class="lb" data-i18n="st.memberFeedback">首领的验收反馈写进打工猫的说明</span>
+      <span class="ds" data-i18n="st.memberFeedbackDesc">首领验收时多给的一句约束（哪里偏了、下次怎么做），之后派给这只猫的每张卡都会带上。默认关。</span>
+      <input id="s-member_feedback" type="checkbox"></div>
+    <div class="prm"><span class="lb" data-i18n="st.feedbackMax">反馈最多多少字</span>
+      <span class="ds" data-i18n="st.feedbackMaxDesc">每只猫那段反馈的上限（不少于 120）。超了先挤掉最旧的，免得说明越写越长、每张卡都要多付模型的钱。</span>
+      <input id="s-member_feedback_max_chars" type="number" min="120"><span class="u" data-i18n="st.chars">字</span></div>
+    <div class="prm"><span class="lb" data-i18n="st.trayNotify">卡交回、出问题时在桌面弹通知</span>
+      <span class="ds" data-i18n="st.trayNotifyDesc">猫把卡交回了、没跑成、没开工或等首领拿主意时，盒子在桌面右下角弹一条系统通知，提醒你去会话里跟首领说一声。</span>
+      <input id="s-tray_notify" type="checkbox" checked></div>
+    <div class="prm"><span class="lb" data-i18n="st.theme">办公室昼夜</span>
+      <span class="ds" data-i18n="st.themeDesc">「自动」档按电脑时间换房间配色，清晨和傍晚是两段渐变。办公室里霓虹招牌下面的开关可以固定成某一段。</span>
+      <span class="times"><label><span data-i18n="st.dawn">清晨</span><input id="t-dawn" type="time" value="06:30"></label>
+        <label><span data-i18n="st.day">白天</span><input id="t-day" type="time" value="07:00"></label>
+        <label><span data-i18n="st.dusk">傍晚</span><input id="t-dusk" type="time" value="18:00"></label>
+        <label><span data-i18n="st.night">夜晚</span><input id="t-night" type="time" value="18:30"></label></span></div>
+    <div class="prm"><span class="lb" data-i18n="st.providers">服务商清单</span>
+      <span class="ds" data-i18n="st.providersDesc">登记 Pi 工位时从这里选服务商和模型，再按公开单价估算花费。清单来自 models.dev（MIT）。「更新」要从网上下载最新的一份。</span>
+      <span style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
+        <span class="ds" id="prov-status" data-i18n="st.reading">正在读…</span><button class="btn" id="btn-prov" data-i18n="st.update">更新</button></span></div>
+    <div class="foot"><span data-i18n="st.foot">这里只放常用参数；端口、留存天数在 data/settings.json 里改。工位在「工位」页里加和改。</span>
+      <span data-i18n="st.version">当前版本</span> <b id="bx-app-version">–</b></div>
+  </div>
+
+  <div class="panel" id="doctor">
+    <div class="hd"><h1 data-i18n="st.selfcheck">自检</h1><span class="sp"></span>
+      <span class="hint" id="doc-sum" style="margin:0" data-i18n="st.checking">正在检查…</span>
+      <a class="btn" href="/doctor" data-i18n="st.seeCheck">去看自检</a>
+    </div>
+  </div>
+
+  <div class="panel" id="legal">
+    <div class="hd"><h1 data-i18n="st.data">数据和隐私</h1><span class="sp"></span>
+      <button type="button" class="btn" id="legal-license" data-i18n="st.license">许可证（MIT）</button>
+      <button type="button" class="btn" id="legal-notices" data-i18n="st.notices">第三方声明</button>
+      <button type="button" class="btn" id="legal-third-party" data-i18n="st.thirdParty">第三方许可全文</button>
+    </div>
+    <div id="privacyBox" class="privacy"><div class="empty" data-i18n="st.readingPrivacy">正在读隐私声明…</div></div>
+    <div class="prm"><span class="lb" data-i18n="st.tmp">临时文件</span>
+      <span class="ds" data-i18n="st.tmpDesc">过程垃圾（存请求正文的 JSON、试跑脚本、中间文件）都在程序目录的 tmp\ 里，每张卡一个子目录。
+        默认留 1 天（设置项 tmp_keep_days），没有卡在跑的时候整个 tmp\ 随时能删，data\ 不动。</span>
+      <span id="tmp-size">–</span><button class="btn" id="btn-tmpclean" data-i18n="st.cleanTmp">清理临时文件</button>
+      <span class="hint" id="tmp-msg"></span></div>
+  </div>
+
+
+  <div class="panel" id="resetBox">
+    <div class="hd"><h1 data-i18n="st.reset">重置所有</h1></div>
+    <p class="say" data-i18n="st.resetSay">把盒子恢复成刚装好的样子：全部工位、设置、API key、任务记录和日志都删掉，不可恢复。data/work 里的产出保留。</p>
+    <button class="btn danger" id="btn-reset" data-i18n="st.reset">重置所有</button>
+    <div id="reset-ask" hidden>
+      <p class="say" id="reset-ask-text"></p>
+      <div style="display:flex;gap:8px"><button class="btn danger" id="reset-yes" data-i18n="st.yes">确定</button>
+        <button class="btn" id="reset-no" data-i18n="st.no">算了</button></div>
+    </div>
+    <div id="reset-run" hidden>
+      <div class="pxbar" id="reset-bar"></div>
+      <div class="pxname" id="reset-name"></div>
+      <div class="msg" id="reset-msg" hidden></div>
+    </div>
+  </div>
+
+  <div class="dlg" id="provDlg" hidden>
+    <div class="box">
+      <h3 data-i18n="st.provDlgTitle">要联网才能更新</h3>
+      <p id="provDlgText"></p>
+      <div class="btns"><button class="btn" id="provDlgNo" data-i18n="st.cancel">取消</button>
+        <button class="btn pri" id="provDlgYes" data-i18n="st.download">确定下载</button></div>
+    </div>
+  </div>
+
+  <div class="foot" data-i18n="st.dataFoot">数据都在 data/：settings.json 是这一页，stations.json 是工位，改文件也行。</div>
+</div>
+<script>
+(function () {
+  function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
+  var PRMS = ["wake_min", "ack_timeout_s", "heartbeat_s", "member_feedback_max_chars"];
+  var BOOLS = ["scene_bubbles", "member_feedback", "tray_notify"];   /* 勾选项：存真假，不是数字 */
+
+  function $(s) { return document.querySelector(s); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function post(obj) { return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) }; }
+  function api(path, opts) { return fetch(path, opts).then(function (r) { return r.json(); }); }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+
+  /* ---------- 表格 ---------- */
+  /* ---------- 核心参数 ---------- */
+  var TIMES = ["dawn", "day", "dusk", "night"];
+  function fillTimes(t) { t = t || {}; TIMES.forEach(function (k) { if (t[k]) { $("#t-" + k).value = t[k]; } }); }
+  function loadSettings() {
+    return api("/api/settings", { cache: "no-store" }).then(function (s) {
+      PRMS.forEach(function (k) { $("#s-" + k).value = s[k] == null ? "" : s[k]; });
+      BOOLS.forEach(function (k) { $("#s-" + k).checked = s[k] !== false; });
+      fillTimes(s.office_theme_times);
+    }).catch(function () { $("#set-msg").textContent = T("st.unreachable"); });
+  }
+
+  /* ---------- 保存：整页一个「保存」 ---------- */
+  $("#btn-setsave").onclick = function () {
+    var body = {};
+    PRMS.forEach(function (k) { body[k] = Math.max(1, num($("#s-" + k).value) || 1); });
+    BOOLS.forEach(function (k) { body[k] = $("#s-" + k).checked; });
+    body.office_theme_times = {};
+    TIMES.forEach(function (k) { var v = $("#t-" + k).value; if (/^\d{2}:\d{2}$/.test(v)) { body.office_theme_times[k] = v; } });
+    var box = $("#set-msg");
+    api("/api/settings", post(body))
+      .then(function (r) {
+        if (r && r.ok === false) {
+          box.className = "hint";
+          box.textContent = T("st.notSaved", { why: r.text || r.code || "参数不对" });
+          return;
+        }
+        PRMS.forEach(function (k) { $("#s-" + k).value = r[k]; });
+        BOOLS.forEach(function (k) { $("#s-" + k).checked = r[k] !== false; });
+        fillTimes(r.office_theme_times);
+        box.className = "saved";
+        box.textContent = T("st.saved");
+      })
+      .catch(function (e) { box.className = "hint"; box.textContent = T("st.saveFail", { why: e }); });
+  };
+
+  /* ---------- 自检：这里只报个总数，明细去 /doctor 看 ---------- */
+  function loadDoctor() {
+    return api("/api/doctor", { cache: "no-store" }).then(function (d) {
+      var fail = num((d.summary || {}).fail);
+      $("#doc-sum").textContent = fail ? T("st.docFail", { n: fail }) : T("st.docOk");
+    }).catch(function () { $("#doc-sum").textContent = T("st.docDown"); });
+  }
+
+  /* ---------- 数据和隐私：读 /legal/privacy（仓库根目录的 PRIVACY.md）画出来 ---------- */
+  function mdInline(s) {
+    return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, "<b>$1</b>");     /* 链接只留文字：设置页不连外网，仓库里同名文件可点 */
+  }
+  function mdBlocks(text) {
+    var out = [], list = null;
+    function close() { if (list) { out.push("</" + list + ">"); list = null; } }
+    text.split(/\r?\n/).forEach(function (ln) {
+      var m;
+      if ((m = /^(#{1,3}) (.*)$/.exec(ln))) { close(); var h = m[1].length === 1 ? "h2" : "h3"; out.push("<" + h + ">" + mdInline(m[2]) + "</" + h + ">"); }
+      else if (/^---+$/.test(ln)) { close(); out.push("<hr>"); }
+      else if ((m = /^- (.*)$/.exec(ln))) { if (list !== "ul") { close(); out.push("<ul>"); list = "ul"; } out.push("<li>" + mdInline(m[1]) + "</li>"); }
+      else if ((m = /^\d+\. (.*)$/.exec(ln))) { if (list !== "ol") { close(); out.push("<ol>"); list = "ol"; } out.push("<li>" + mdInline(m[1]) + "</li>"); }
+      else if (ln.trim()) { close(); out.push("<p>" + mdInline(ln) + "</p>"); }
+      else { close(); }
+    });
+    close();
+    return out.join("");
+  }
+  function loadPrivacy() {
+    fetch("/legal/privacy?lang=" + encodeURIComponent(BXi18n.lang()), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+      .then(function (t) { $("#privacyBox").innerHTML = mdBlocks(t); })
+      .catch(function () {
+        $("#privacyBox").innerHTML = '<div class="empty">' + esc(T("st.privacyFail")) + "</div>";
+      });
+  }
+
+  /* ---------- 许可证 / 第三方声明：在页面里开像素窗口，不跳系统浏览器（exe 窗口里新标签页是画蛇添足） ---------- */
+  function openLegal(id, path, title) {
+    var host = document.getElementById("bx-legal-" + id);
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "bx-legal-" + id;
+      host.className = "bx-legalwin";
+      host.innerHTML =
+        '<div class="pxw-mask" data-x=""></div>' +
+        '<div class="pxw bx-legalbox" role="dialog" aria-label="' + esc(title) + '" tabindex="-1">' +
+        '<div class="pxw-title"><span class="t">' + esc(title) + '</span>' +
+        '<button type="button" class="pxb small" aria-label="关" data-x="">×</button></div>' +
+        '<div class="pxw-body legal-body"></div></div>';
+      document.body.appendChild(host);
+      var btn = document.getElementById(id);
+      host.addEventListener("click", function (e) {
+        if (e.target.closest("[data-x]")) { closeLegal(host, btn); }
+      });
+      host.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { e.stopPropagation(); closeLegal(host, btn); }
+      });
+    }
+    /* 每次点开都重读一遍：上次读挂了，关掉再点还有救 */
+    host.classList.add("on");
+    focusLegal(host);
+    var body = host.querySelector(".legal-body");
+    body.innerHTML = '<div class="empty">' + esc(T("st.reading")) + "</div>";
+    fetch(path + "?lang=" + encodeURIComponent(BXi18n.lang()), { cache: "no-store" }).then(function (r) {
+      if (!r.ok) { return Promise.reject(r.status); }
+      return r.text();
+    }).then(function (t) {
+      body.innerHTML = '<pre class="legal-full">' + esc(t) + "</pre>";
+    }).catch(function () {
+      body.innerHTML = '<div class="empty">' + esc(T("st.legalFail")) + "</div>";
+    });
+  }
+  function focusLegal(host) { host.querySelector(".bx-legalbox").focus(); }
+  function closeLegal(host, btn) {
+    host.classList.remove("on");
+    if (btn) { btn.focus(); }
+  }
+  var LEGAL_BTNS = [
+    { id: "legal-license", path: "/legal/license", title: T("st.license") },
+    { id: "legal-notices", path: "/legal/notices", title: T("st.notices") },
+    { id: "legal-third-party", path: "/legal/third-party", title: T("st.thirdParty") }
+  ];
+  LEGAL_BTNS.forEach(function (b) {
+    var el = document.getElementById(b.id);
+    if (el) { el.onclick = function () { openLegal(b.id, b.path, b.title); }; }
+  });
+
+  /* ---------- 临时文件：占多大 + 一键清理（在跑的卡不动） ---------- */
+  function loadTmp() {
+    return api("/api/tmp", { cache: "no-store" }).then(function (r) {
+      var b = num(r && r.bytes);
+      $("#tmp-size").textContent = T("st.tmpSize", { n: (b / 1048576).toFixed(1) });
+    }).catch(function () { $("#tmp-size").textContent = T("st.unknown"); });
+  }
+  $("#btn-tmpclean").onclick = function () {
+    var btn = this;
+    btn.disabled = true;
+    api("/api/tmp/clean", post({})).then(function (r) {
+      btn.disabled = false;
+      $("#tmp-msg").textContent = T("st.tmpCleaned", { n: num(r && r.removed), m: num(r && r.skipped) });
+      loadTmp();
+    }).catch(function (e) { btn.disabled = false; $("#tmp-msg").textContent = T("st.tmpFail", { why: String(e) }); });
+  };
+  loadTmp();
+
+  /* ---------- 重置所有：两次确认 → 像素进度条 → 回首页走上岗 ---------- */
+  var RESET_TEXT = T("st.resetText");
+  var resetAsk = null;
+  function askReset(text, fn) {
+    resetAsk = fn;
+    $("#reset-ask-text").textContent = text;
+    $("#reset-ask").hidden = false;
+    $("#btn-reset").disabled = true;
+  }
+  function closeAsk() {
+    resetAsk = null;
+    $("#reset-ask").hidden = true;
+    $("#btn-reset").disabled = false;
+  }
+  $("#btn-reset").onclick = function () { askReset(RESET_TEXT, doReset); };
+  $("#reset-no").onclick = closeAsk;
+  $("#reset-yes").onclick = function () { var fn = resetAsk; closeAsk(); if (fn) { fn(); } };
+
+  function doReset() {
+    api("/api/reset", post({ confirm: true, force: false })).then(function (r) {
+      if (r && r.code === "busy") {
+        askReset(T("st.resetBusy", { n: num(r.running) }), doForceReset);
+        return;
+      }
+      showSteps(r);
+    }).catch(function (e) { resetMsg(T("st.resetFail", { why: String(e) }), "fail"); });
+  }
+  function doForceReset() {
+    api("/api/reset", post({ confirm: true, force: true })).then(showSteps)
+      .catch(function (e) { resetMsg(T("st.resetFail", { why: String(e) }), "fail"); });
+  }
+  /* 按核心回的 steps 逐格填；全过就回首页（首页会带着走一遍上岗） */
+  function showSteps(r) {
+    var steps = (r && r.steps) || [];
+    var bar = $("#reset-bar"), name = $("#reset-name");
+    bar.innerHTML = steps.map(function () { return "<i></i>"; }).join("");
+    $("#reset-run").hidden = false;
+    $("#btn-reset").disabled = true;
+    var cells = bar.querySelectorAll("i"), i = 0;
+    (function tick() {
+      if (i >= steps.length) { return; }
+      var s = steps[i];
+      cells[i].className = s.ok ? "on" : "bad";
+      name.textContent = (s.ok ? "" : T("st.stepFail")) + s.name + "（" + (i + 1) + "/" + steps.length + "）";
+      i += 1;
+      setTimeout(tick, 160);
+    })();
+    var bad = steps.filter(function (s) { return !s.ok; });
+    setTimeout(function () {
+      if (bad.length) {
+        resetMsg(T("st.stepsFail", { n: bad.length, names: bad.map(function (s) { return s.name; }).join(", ") }), "fail");
+        return;
+      }
+      resetMsg(T("st.resetDone"), "ok");
+      setTimeout(function () { window.location.href = "/"; }, 900);
+    }, steps.length * 160 + 120);
+  }
+  function resetMsg(text, kind) {
+    var box = $("#reset-msg");
+    box.hidden = false;
+    box.className = "msg " + (kind || "info");
+    box.textContent = text;
+  }
+  /* ---------- 服务商清单：显示用的哪份，更新要联网先确认 ---------- */
+  function provLabel(m) {
+    var d = m && m.updated ? m.updated : T("st.dateUnknown");
+    return m && m.source === "data" ? T("st.updated", { d: d }) : T("st.snapshot", { d: d });
+  }
+  function loadProv() {
+    return api("/api/providers?lite=1", { cache: "no-store" }).then(function (m) {
+      $("#prov-status").textContent = provLabel(m);
+    }).catch(function () { $("#prov-status").textContent = T("st.provStatusFail"); });
+  }
+  var provYes = null;
+  function askProvUpdate(text, yes) {
+    $("#provDlgText").textContent = text + "\n" + T("st.provDlgNote");
+    provYes = yes;
+    $("#provDlg").hidden = false;
+  }
+  $("#provDlgNo").onclick = function () { $("#provDlg").hidden = true; provYes = null; };
+  $("#provDlgYes").onclick = function () {
+    $("#provDlg").hidden = true;
+    var f = provYes; provYes = null;
+    if (f) { f(); }
+  };
+  $("#btn-prov").onclick = function () {
+    var b = this;
+    b.disabled = true;
+    api("/api/providers?lite=1", { cache: "no-store" }).then(function (m) { $("#prov-status").textContent = provLabel(m); }).catch(function () { });
+    api("/api/providers/refresh", post({ confirm: false })).then(function (r) {
+      if (r && r.needs_confirm) {
+        b.disabled = false;
+        loadProv();
+        askProvUpdate(r.text || "", function () { doProvUpdate(b); });
+        return;
+      }
+      doProvUpdate(b);
+    }).catch(function (e) {
+      b.disabled = false;
+      $("#prov-status").textContent = T("st.provFail");
+    });
+  };
+  function doProvUpdate(b) {
+    $("#prov-status").textContent = T("st.downloading");
+    api("/api/providers/refresh", post({ confirm: true })).then(function (r) {
+      b.disabled = false;
+      if (r && r.ok) { loadProv(); } else { $("#prov-status").textContent = T("st.provFailWhy", { why: (r && r.text) || T("st.unknown") }); }
+    }).catch(function () {
+      b.disabled = false;
+      $("#prov-status").textContent = T("st.provFail");
+    });
+  }
+
+  /* ---------- 语言 ---------- */
+  function paintLang() {
+    var cur = window.BXi18n ? window.BXi18n.lang() : "zh";
+    document.documentElement.lang = cur === "en" ? "en" : "zh-CN";
+    ["zh", "en"].forEach(function (v) {
+      var b = document.getElementById("lang-" + v);
+      if (b) { b.classList.toggle("on", v === cur); }
+    });
+    loadPrivacy();                                   /* 隐私声明也跟着换语言 */
+  }
+  ["zh", "en"].forEach(function (v) {
+    var b = document.getElementById("lang-" + v);
+    if (b) {
+      b.onclick = function () {
+        if (window.BXi18n) { window.BXi18n.setLang(v); }
+        paintLang();
+      };
+    }
+  });
+  paintLang();
+  addEventListener("bx-lang-changed", paintLang);
+
+  /* ---------- 起动 ---------- */
+  loadSettings();
+  loadDoctor();
+  loadProv();
+})();
+</script>
+</body>
+</html>

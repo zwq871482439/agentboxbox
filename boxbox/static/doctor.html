@@ -1,0 +1,134 @@
+<!-- boxbox doctor page v1: /api/doctor rendered as a checklist, re-run + copy diagnostics -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="doc.title">自检 · 猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<style>
+[hidden]{display:none!important}
+:root{
+  --bg:#14161a; --panel:#1b1e24; --line:#2b3037; --ink:#e5e8ea; --dim:#98a1ac;
+  --accent:#7aa8d8; --red:#d9776a; --amber:#cfa14a; --green:#6db391; --code:#22262d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+a{color:var(--accent)}
+h1,h2{margin:0;font-weight:600}
+code,pre,.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .brand{font-weight:600;letter-spacing:.5px}
+.top nav a{margin-right:14px;color:var(--dim);text-decoration:none}
+.top nav a.cur{color:var(--ink);font-weight:600}
+.wrap{max-width:860px;margin:22px auto;padding:0 18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:16px}
+.sum{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.sum .n{color:var(--dim)}
+.sum .n b{color:var(--ink);margin-left:4px}
+.sum .n.fail b{color:var(--red)}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--accent)}
+.chk{display:grid;grid-template-columns:62px 1fr;gap:2px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.chk:first-child{border-top:0}
+.mk{font-weight:600;font-family:ui-monospace,Consolas,monospace}
+.mk.ok{color:var(--green)} .mk.fail{color:var(--red)} .mk.skip{color:var(--dim)}
+.lb{font-weight:600}
+.dt{grid-column:2;color:var(--dim);word-break:break-all}
+.fx{grid-column:2;color:var(--amber)}
+.fx::before{content:var(--fixp,"怎么办：");color:var(--ink)}
+.empty{color:var(--dim);padding:10px 0}
+.foot{color:var(--dim);font-size:12px;margin-top:8px}
+pre.diag{background:var(--code);padding:10px;border-radius:6px;white-space:pre-wrap;max-height:320px;overflow:auto;font-size:12px}
+</style>
+<script src="/static/i18n.js"></script>
+<script src="/static/i18n-doctor.js"></script>
+<script src="/static/topbar.js" defer></script>
+</head>
+<body>
+<header id="bx-top"></header>
+<div class="wrap">
+  <div class="panel">
+    <div class="sum">
+      <h1 style="font-size:16px" data-i18n="dr.h1">自检</h1>
+      <span class="n"><span data-i18n="dr.ok">通过</span><b id="nOk">—</b></span>
+      <span class="n fail"><span data-i18n="dr.fail">不过</span><b id="nFail">—</b></span>
+      <span class="n"><span data-i18n="dr.skip">跳过</span><b id="nSkip">—</b></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="rerun" data-i18n="dr.rerun">重新检查</button>
+      <button class="btn" id="copy" data-i18n="dr.copy">复制诊断信息</button>
+    </div>
+    <div class="foot" id="stamp" data-i18n="dr.checking">正在检查…</div>
+  </div>
+  <div class="panel" id="list"><div class="empty" data-i18n="dr.checking">正在检查…</div></div>
+  <details class="panel" id="diagBox"><summary data-i18n="dr.diagTitle">诊断信息（纯文本，已脱敏）</summary><pre class="diag" id="diag"></pre></details>
+  <div class="foot" data-i18n="dr.foot">不过的项先看「怎么办」，改完点「重新检查」。</div>
+</div>
+<script>
+(function () {
+  function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
+  function $(s) { return document.querySelector(s); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function tagWord(ok) { return ok === true ? T("dr.ok") : (ok === false ? T("dr.fail") : T("dr.skip")); }
+  function render(d) {
+    var s = d.summary || {};
+    $("#nOk").textContent = s.ok == null ? "—" : s.ok;
+    $("#nFail").textContent = s.fail == null ? "—" : s.fail;
+    $("#nSkip").textContent = s.skip == null ? "—" : s.skip;
+    var checks = d.checks || [];
+    checks = checks.slice().sort(function (a, b) { return rank(a) - rank(b); });
+    $("#list").innerHTML = checks.length ? checks.map(function (c) {
+      var mk = c.ok === true ? "ok" : (c.ok === false ? "fail" : "skip");
+      var tag = tagWord(c.ok);
+      return '<div class="chk"><span class="mk ' + mk + '">' + tag + '</span><span class="lb">' + esc(c.label) +
+        '</span>' +
+        '<span class="dt">' + esc(c.detail || "") + '</span>' +
+        (c.ok === false && c.fix ? '<span class="fx">' + esc(c.fix) + '</span>' : '') + '</div>';
+    }).join("") : '<div class="empty">' + esc(T("dr.noChecks")) + "</div>";
+    $("#diag").textContent = d.text || "";
+    var now = new Date();
+    var hhmmss = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2) + ":" + ("0" + now.getSeconds()).slice(-2);
+    $("#stamp").textContent = (s.red ? T("dr.someFail", { n: s.fail }) : T("dr.allOk")) + " " +
+      T("dr.checkedAt", { t: hhmmss });
+    document.title = s.red ? T("dr.titleFail", { n: s.fail }) : T("dr.titleOk");
+  }
+  function rank(c) { return c.ok === false ? 0 : (c.ok === true ? 1 : 2); }
+  function load() {
+    $("#stamp").textContent = T("dr.checking");
+    fetch("/api/doctor?text=1", { cache: "no-store" }).then(function (r) { return r.json(); }).then(render).catch(function (e) {
+      $("#list").innerHTML = '<div class="empty">' + esc(T("dr.down")) + "</div>";
+      $("#stamp").textContent = T("dr.downHint");
+    });
+  }
+  $("#rerun").onclick = load;
+  $("#copy").onclick = function () {
+    var b = this, t = $("#diag").textContent;
+    if (!t) { b.textContent = T("dr.noDiag"); setTimeout(function () { b.textContent = T("dr.copy"); }, 1500); return; }
+    function done() { b.textContent = T("dr.copied"); setTimeout(function () { b.textContent = T("dr.copy"); }, 1500); }
+    function fail() {
+      $("#diagBox").open = true;
+      b.textContent = T("dr.copyFail");
+      setTimeout(function () { b.textContent = T("dr.copy"); }, 2000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fail);
+    else { fail(); }
+  };
+  /* 「怎么办：」这个前缀跟着语言走 */
+  function applyFixPrefix() {
+    document.documentElement.style.setProperty("--fixp", T("dr.fixPrefix"));
+  }
+  applyFixPrefix();
+  addEventListener("bx-lang-changed", applyFixPrefix);
+
+  load();
+})();
+</script>
+</body>
+</html>
