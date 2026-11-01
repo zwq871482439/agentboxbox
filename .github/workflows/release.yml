@@ -38,8 +38,11 @@ jobs:
         run: python -m pytest -q tests
 
       - name: 重算第三方许可清单
-        # 打包机装的包和开发机不一定一样，build_exe.ps1 会先核对清单是不是最新
-        run: python packaging/licenses.py
+        # 打包机装的包和开发机不一定一样，build_exe.ps1 会先核对清单是不是最新；
+        # 清单里有自带 Node / Pi 的版本，得先把 build/runtime 备好再算，不然和打包时核对的对不上
+        run: |
+          python packaging/runtime.py build/runtime
+          python packaging/licenses.py
 
       - name: 打 exe
         shell: pwsh
