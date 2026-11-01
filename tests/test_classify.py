@@ -2,7 +2,7 @@
 import os
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -56,7 +56,9 @@ class ResetTime(unittest.TestCase):
     def test_iso(self):
         r = classify.reset_time("quota exceeded, resets at 2026-10-22T00:00:00Z")
         self.assertIsNotNone(r)
-        self.assertIn("2026-10-22T08:00:00", r)  # UTC -> 本地 +08:00（假定本机东八区）
+        # 比时刻，不比字符串：打包机可能不在东八区，写死本地钟点会在别的时区挂掉
+        expected = datetime(2026, 10, 22, 0, 0, tzinfo=timezone.utc).astimezone()
+        self.assertEqual(datetime.fromisoformat(r), expected)
 
     def test_retry_after(self):
         now = datetime.now().astimezone()
