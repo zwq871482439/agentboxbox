@@ -11,6 +11,10 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      # 打包机是英文 Windows（cp1252），脚本输出中文会直接崩；统一走 UTF-8
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
     steps:
       - name: 取源码
         uses: actions/checkout@v4
