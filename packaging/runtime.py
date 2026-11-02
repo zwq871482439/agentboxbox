@@ -47,7 +47,9 @@ def _version(pkg: pathlib.Path) -> str | None:
 
 
 def _global_pkg() -> pathlib.Path | None:
-    root = subprocess.run([_npm(), "root", "-g"], capture_output=True, text=True, shell=IS_WIN).stdout.strip()
+    # 子进程输出在英文 Windows 上是 cp1252，这里按 UTF-8 解，免得中文/符号变成乱码
+    root = subprocess.run([_npm(), "root", "-g"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", shell=IS_WIN).stdout.strip()
     p = pathlib.Path(root).joinpath(*PI_PKG) if root else None
     return p if p and (p / "dist" / "bundle" / "cli.js").is_file() else None
 
@@ -62,7 +64,7 @@ def fetch_pi(version: str = PI_VERSION) -> pathlib.Path:
     dest.mkdir(parents=True)
     spec = "%s/%s@%s" % (PI_PKG[0], PI_PKG[1], version)
     r = subprocess.run([_npm(), "pack", spec, "--silent", "--pack-destination", str(dest)],
-                       capture_output=True, text=True, shell=IS_WIN)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", shell=IS_WIN)
     tgz = next(iter(sorted(dest.glob("*.tgz"))), None)
     if r.returncode != 0 or tgz is None:
         raise SystemExit("取不到 Pi %s：%s" % (version, (r.stderr or r.stdout).strip()[:300]))
@@ -89,13 +91,19 @@ def stage(out: pathlib.Path, node: pathlib.Path, pi_pkg: pathlib.Path) -> dict:
     shutil.copy2(node, out / node.name)
     shutil.copytree(pi_pkg / "dist" / "bundle", out / "pi")
     shutil.copy2(pi_pkg / "package.json", out / "pi" / "package.json")   # Pi 从这里读自己的版本号（没有就报 0.0.0）
-    node_ver = subprocess.run([str(node), "--version"], capture_output=True, text=True).stdout.strip()
+    node_ver = subprocess.run([str(node), "--version"], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace").stdout.strip()
     versions = {"node": node_ver, "pi": _version(pi_pkg)}
     (out / "versions.json").write_text(json.dumps(versions), encoding="utf-8")
     return versions
 
 
 if __name__ == "__main__":
+    # 打包机是英文 Windows，输出编码是 cp1252，中文一打就崩；脚本自己把输出改成 UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "build" / "runtime"
     v = stage(out, find_node(), find_pi_pkg())
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())

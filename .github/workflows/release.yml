@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+  # 手动触发 = 演练：跑测试 + 打 exe，但只把 exe 存成附件，不建 Release
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,21 +13,17 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    env:
-      # 打包机是英文 Windows（cp1252），脚本输出中文会直接崩；统一走 UTF-8
-      PYTHONUTF8: "1"
-      PYTHONIOENCODING: utf-8
     steps:
       - name: 取源码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 装 Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: 装 Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -35,7 +33,7 @@ jobs:
           python -m pip install pyinstaller pystray pywebview pytest
 
       - name: 跑单元测试
-        run: python -m pytest -q tests
+        run: python -m pytest -q -p no:cacheprovider tests
 
       - name: 重算第三方许可清单
         # 打包机装的包和开发机不一定一样，build_exe.ps1 会先核对清单是不是最新；
@@ -43,6 +41,7 @@ jobs:
         run: |
           python packaging/runtime.py build/runtime
           python packaging/licenses.py
+          python packaging/licenses.py --check
 
       - name: 打 exe
         shell: pwsh
@@ -64,10 +63,21 @@ jobs:
           Copy-Item $notes dist/release-notes.md
 
       - name: 建 Release
-        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
         with:
           body_path: dist/release-notes.md
           files: |
             dist/*.exe
             dist/*.sha256
             dist/release-notes.md
+
+      - name: 演练：把 exe 存成附件
+        # 先在发版仓 main 上手动跑一次演练，过了再推标签
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: agentboxbox-dry-run
+          path: |
+            dist/*.exe
+            dist/*.sha256

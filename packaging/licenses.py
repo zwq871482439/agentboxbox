@@ -116,7 +116,9 @@ def pi_package_dir() -> pathlib.Path | None:
     npm = shutil.which("npm")
     if not npm:
         return None
+    # 子进程输出在英文 Windows 上是 cp1252，这里按 UTF-8 解，免得路径里的中文变成乱码
     root = subprocess.run([npm, "root", "-g"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace",
                           shell=sys.platform.startswith("win")).stdout.strip()
     p = pathlib.Path(root) / "@earendil-works" / "pi-coding-agent"
     return p if p.is_dir() else None
@@ -252,6 +254,11 @@ def verify_toc(toc_path: pathlib.Path) -> list[str]:
 
 
 def main() -> int:
+    # 打包机是英文 Windows，输出编码是 cp1252，中文一打就崩；脚本自己把输出改成 UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="只检查 THIRD_PARTY_LICENSES.txt 是不是最新")
     ap.add_argument("--verify-toc", help="打完包核对 PYZ-00.toc：exe 里的 Python 包都要在许可清单里")

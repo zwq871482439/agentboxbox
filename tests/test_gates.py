@@ -25,7 +25,7 @@ class TestExists(unittest.TestCase):
 
     def test_empty_file_fails(self):
         with tempfile.TemporaryDirectory() as d:
-            open(os.path.join(d, "empty.txt"), "w").close()
+            open(os.path.join(d, "empty.txt"), "w", encoding="utf-8").close()
             r = gates.run_gate({"check": "exists", "path": "empty.txt"}, d, "20261021-003")
             self.assertFalse(r.ok)
             self.assertIn("空", r.reason)
