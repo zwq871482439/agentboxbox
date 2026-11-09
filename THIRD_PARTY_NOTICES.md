@@ -4,7 +4,7 @@ agentboxbox 自己的代码是 MIT 许可（见 [LICENSE](LICENSE)）。这份�
 
 ## 仓库里自己的美术和素材
 
-- **像素猫、办公室、道具、上岗动画**（`office/`、`assets/chibicat/`、`assets/design/`）：本仓库原创，全部由仓库里的代码绘制（`office/build/cats.js`、`office/office.html` 和各目录的生成脚本），按 MIT 许可随代码一起分发。办公室早中晚的背景也是画布代码画的，不是外部图片。
+- **像素猫、办公室、道具、上岗动画**（`office/`、`assets/chibicat/`、`assets/design/`）：本仓库原创，全部由代码在画布上绘制（`office/office.html`、`office/build/cats.js`），按 MIT 许可随代码一起分发。办公室早中晚的背景也是画布代码画的，不是外部图片。
 - **应用图标**（`assets/icon/`）：用 Grok（xAI）生成后由维护者挑选、再用 `make_icons.py` 裁切，使用遵守 xAI 的服务条款。我们在自己享有的权利范围内按 MIT 许可提供。
 - **宣传短片**（`assets/promo/`）：画面由脚本逐帧绘制，配乐由 `make_music.py` 用 numpy 合成。字幕渲染时用了 Noto Sans CJK SC（SIL Open Font License 1.1），仓库里不带字体文件。
 - **截图**（`office/screenshots/`、`office/mockups/`）：都是本软件自己的界面。

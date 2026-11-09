@@ -4,7 +4,7 @@ agentboxbox's own code is MIT-licensed (see [LICENSE](LICENSE)). This file expla
 
 ## Art and assets of this repository
 
-- **Pixel cats, the office, the props, the onboarding animations** (`office/`, `assets/chibicat/`, `assets/design/`): original to this repository and drawn by the code in it (`office/build/cats.js`, `office/office.html` and the generator scripts in those folders), distributed under the MIT licence together with the code. The morning, day and evening backgrounds of the office are drawn by the canvas code, not external images.
+- **Pixel cats, the office, the props, the onboarding animations** (`office/`, `assets/chibicat/`, `assets/design/`): original to this repository and drawn on the canvas by code (`office/office.html`, `office/build/cats.js`), distributed under the MIT licence together with the code. The morning, day and evening backgrounds of the office are drawn by the canvas code, not external images.
 - **Application icon** (`assets/icon/`): generated with Grok (xAI), picked by the maintainer and cut with `make_icons.py`; used under the xAI terms of service. We offer it under the MIT licence to the extent we hold rights in it.
 - **Promo clips** (`assets/promo/`): the frames are drawn by a script, the music is synthesised with numpy by `make_music.py`. The subtitles use Noto Sans CJK SC (SIL Open Font License 1.1); no font file is kept in the repository.
 - **Screenshots** (`office/screenshots/`, `office/mockups/`): all of them are this application's own interface.

@@ -175,10 +175,9 @@ boxbox/      the core (app / store / dispatcher / watchdog / tokens / gates / of
              templates/ (the leader's and the worker cat's manuals, each in Chinese and English)
 packaging/   build scripts (build_exe.ps1 → one-file agentboxbox_<version>.exe, Node and Pi bundled)
 assets/      icons and pixel art (original)
-office/      the office scene (/office and the home-page embed; office/build is generated)
+office/      the office scene (/office and the home-page embed)
 static/tabler offline stylesheet (tabler.min.css for the home shell)
-tests/       unit tests (stdlib only)
-docs/        release notes for each version (release-0.3.md, release-0.4.md)
+docs/        release notes for each version (release-*.md)
 data/        runtime data: boxbox.db, stations.json, secrets.json, tasks/, logs/ (gitignored; next to the exe in exe mode)
 tmp/         temp files: one folder per card, auto-cleaned (gitignored; next to the exe in exe mode)
 ```
@@ -196,12 +195,11 @@ A few more facts:
 ## Development
 
 ```
-python -m pytest -q -p no:cacheprovider tests --ignore=tests/personas   # full suite, should be green
-python -m ruff check boxbox tests packaging                             # style checks
+python -m boxbox serve                   # run from source, then open http://127.0.0.1:8878
 pwsh packaging/build_exe.ps1             # package → dist/agentboxbox_<version>.exe (needs pip install pyinstaller pystray pywebview)
 ```
 
-What changed in each version: [docs/release-0.4.md](docs/release-0.4.md) (0.4), [docs/release-0.3.md](docs/release-0.3.md) (0.3).
+What changed in each version: [docs/release-0.5.md](docs/release-0.5.md) (0.5), [docs/release-0.4.md](docs/release-0.4.md) (0.4), [docs/release-0.3.md](docs/release-0.3.md) (0.3).
 
 ## License, privacy and security
 

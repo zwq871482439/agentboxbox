@@ -23,7 +23,8 @@ try {
         '--add-data', "$root\boxbox\connectors.json;boxbox",
         '--add-data', "$root\boxbox\providers.json;boxbox",   # #80：models.dev 服务商清单快照
         '--add-data', "$root\static;static",
-        '--add-data', "$root\office;office",
+        '--add-data', "$root\office\office.html;office",   # 只带运行时要的两个文件：拼装源码、截图不进 exe
+        '--add-data', "$root\office\build\cats.js;office\build",
         '--add-data', "$root\assets\icon;assets\icon",
         '--add-data', "$root\LICENSE;.", '--add-data', "$root\THIRD_PARTY_NOTICES.md;.",   # 许可和隐私声明随 exe 走，设置页能打开
         '--add-data', "$root\THIRD_PARTY_LICENSES.txt;.", '--add-data', "$root\PRIVACY.md;.",

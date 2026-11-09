@@ -175,10 +175,9 @@ boxbox/      核心（app / store / dispatcher / watchdog / tokens / gates / off
              templates/（首领 / 打工猫的说明模板，每份都有中文和英文两版）
 packaging/   打包脚本（build_exe.ps1 → 单文件 agentboxbox_<版本号>.exe，Node 和 Pi 一起打进去）
 assets/      图标和像素立绘（原创）
-office/      办公室画面（/office 与首页内嵌；office/build 是生成物）
+office/      办公室画面（/office 与首页内嵌）
 static/tabler 离线样式（首页外壳用的 tabler.min.css）
-tests/       单元测试（仅标准库）
-docs/        每个版本的更新说明（release-0.3.md · release-0.4.md）
+docs/        每个版本的更新说明（release-*.md）
 data/        运行时数据：boxbox.db、stations.json、secrets.json、tasks/、logs/（gitignored，不入库；exe 模式下在 exe 旁边）
 tmp/         临时文件：每张卡一个子目录，自动清理（gitignored；exe 模式下在 exe 旁边）
 ```
@@ -196,12 +195,11 @@ tmp/         临时文件：每张卡一个子目录，自动清理（gitignored
 ## 开发
 
 ```
-python -m pytest -q -p no:cacheprovider tests --ignore=tests/personas   # 全量用例，应全过
-python -m ruff check boxbox tests packaging                             # 规范检查
+python -m boxbox serve                   # 从源码起盒子，浏览器打开 http://127.0.0.1:8878
 pwsh packaging/build_exe.ps1             # 打包 → dist/agentboxbox_<版本号>.exe（需 pip install pyinstaller pystray pywebview）
 ```
 
-每个版本改了什么：[docs/release-0.4.md](docs/release-0.4.md)（0.4）、[docs/release-0.3.md](docs/release-0.3.md)（0.3）。
+每个版本改了什么：[docs/release-0.5.md](docs/release-0.5.md)（0.5）、[docs/release-0.4.md](docs/release-0.4.md)（0.4）、[docs/release-0.3.md](docs/release-0.3.md)（0.3）。
 
 ## 许可、隐私和安全
 
