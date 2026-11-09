@@ -10,9 +10,7 @@ data/logs、data/tasks、data/sessions、data/pi。
 """
 from __future__ import annotations
 
-import shutil
-
-from . import config, i18n
+from . import config, i18n, tmpdir
 
 CLEAR_DIRS = ("tasks", "sessions", "pi")      # 整个目录清掉重建
 TRUNCATE_DIRS = ("logs",)                     # 正在写的日志不删，截断成空文件
@@ -62,7 +60,7 @@ def _clear_files() -> None:
         if root.is_dir():
             for child in root.iterdir():
                 if child.is_dir():
-                    shutil.rmtree(child, ignore_errors=True)
+                    tmpdir.rmtree_safe(child, ignore_errors=True)
                 else:
                     try:
                         child.unlink()

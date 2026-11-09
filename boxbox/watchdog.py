@@ -1,12 +1,15 @@
 """Watchdog thread: heartbeats for open runs, finish detection, 'dispatched but not started' marks,
-leader silence -> badge. Never kills anything (§六)."""
+leader silence -> badge.
+
+卡住（命令没输出、模型没回、好久不调用工具）只记一条提醒。单条命令到了硬上限才停掉这次运行。
+"""
 from __future__ import annotations
 
 import datetime as _dt
 import threading
 import time
 
-from . import config, exchange, i18n, procjob, tasks, tmpdir
+from . import alerts, config, exchange, i18n, procjob, runlog, stall, tasks, tmpdir
 from .dispatcher import INT_CRASH
 from .store import now_iso
 
@@ -31,6 +34,40 @@ class Watchdog(threading.Thread):
 
     def tick(self):
         store = self.d.store
+        # 和撤卡同一把锁：这一拍里的收尾不能和撤掉交错，不然撤掉的运行会被改成失败
+        with self.d.lock:
+            self._tick_runs(store)
+        self._quota_interval()
+        self._badge()
+        self._tmp_clean()
+        self._scheduled_seen()
+        try:
+            self.d.start_ready_queued()   # 自愈：排队里还有能开工的（比如核心重启过）就补开
+        except Exception as e:  # noqa: BLE001
+            try:
+                store.event("watchdog_error", i18n.t("ev.wd.start_err", err=e))
+            except Exception:  # noqa: BLE001
+                pass
+        try:   # 等接口的排队卡：到 network_retry_s 的点就再探一次，通了自动开工（内部自己限频）
+            self.d.retry_network_queued()
+        except Exception as e:  # noqa: BLE001
+            try:
+                store.event("watchdog_error", i18n.t("ev.wd.retry_err", err=e))
+            except Exception:  # noqa: BLE001
+                pass
+        try:   # 歇着的猫到点回来：变回「闲」并接排队的卡（额度用完 / 被限流 / 服务端出错）
+            self.d.restore_resting()
+        except Exception as e:  # noqa: BLE001
+            try:
+                store.event("watchdog_error", i18n.t("ev.wd.back_err", err=e))
+            except Exception:  # noqa: BLE001
+                pass
+        try:   # 回来了但没卡可接的：也说一声（首领听得到）
+            self.d.announce_back()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _tick_runs(self, store):
         for run in store.open_runs():
             handle = self.d.handles.get(run["run_id"])
             st = config.station(run["station"])
@@ -88,15 +125,22 @@ class Watchdog(threading.Thread):
                     self.d.report(run["task_id"], "done", summary, run["station"])
                     continue
             hb = runner.heartbeat(handle)
+            fields = {}
             if hb.last_activity:
-                fields = {"last_activity": hb.last_activity}
+                fields["last_activity"] = hb.last_activity
                 if not run["first_activity"]:
                     fields["first_activity"] = hb.last_activity
                     t = store.get_task(run["task_id"])
                     if t and t["state"] == "dispatched":
                         store.update_task(t["id"], state="running")
                         store.station_touch(run["station"], state="running", task_id=t["id"], since=now_iso())
-                        store.event("running", i18n.t("ev.working", self.d.lang(), sid=run["station"]), run["station"], t["id"], data={"evidence": hb.evidence})
+                        store.event("running", i18n.t("ev.working", self.d.lang(), sid=run["station"]),
+                                    run["station"], t["id"], data={"evidence": hb.evidence})
+            if hb.progress:
+                for key in stall.PROGRESS_COLS:
+                    if key in hb.progress and hb.progress[key] is not None:
+                        fields[key] = hb.progress[key]
+            if fields:
                 store.update_run(run["run_id"], **fields)
             if hb.finished:
                 file_mode = runner.mode == "scheduled" and not handle.extra.get("reported")
@@ -106,35 +150,10 @@ class Watchdog(threading.Thread):
                     # 超时：领走后 work_timeout_min 没 DONE（§6 action=timeout）
                     store.exchange_add(run["station"], run["task_id"], int((t_row or {}).get("round") or 1), "timeout", 0)
                     store.event("timeout", i18n.t("ev.timeout_file", sid=run["station"]), run["station"], run["task_id"])
-        self._quota_interval()
-        self._badge()
-        self._tmp_clean()
-        self._scheduled_seen()
-        try:
-            self.d.start_ready_queued()   # 自愈：排队里还有能开工的（比如核心重启过）就补开
-        except Exception as e:  # noqa: BLE001
-            try:
-                store.event("watchdog_error", i18n.t("ev.wd.start_err", err=e))
-            except Exception:  # noqa: BLE001
-                pass
-        try:   # 等接口的排队卡：到 network_retry_s 的点就再探一次，通了自动开工（内部自己限频）
-            self.d.retry_network_queued()
-        except Exception as e:  # noqa: BLE001
-            try:
-                store.event("watchdog_error", i18n.t("ev.wd.retry_err", err=e))
-            except Exception:  # noqa: BLE001
-                pass
-        try:   # 歇着的猫到点回来：变回「闲」并接排队的卡（额度用完 / 被限流 / 服务端出错）
-            self.d.restore_resting()
-        except Exception as e:  # noqa: BLE001
-            try:
-                store.event("watchdog_error", i18n.t("ev.wd.back_err", err=e))
-            except Exception:  # noqa: BLE001
-                pass
-        try:   # 回来了但没卡可接的：也说一声（首领听得到）
-            self.d.announce_back()
-        except Exception:  # noqa: BLE001
-            pass
+                continue
+            fresh = store.get_run(run["run_id"])
+            if fresh is not None and not fresh.get("ended"):
+                stall.consider(self.d, fresh)
 
     def _scheduled_came(self, station_id: str, now: str) -> None:
         """定时任务来过了（交回了回报就是证据）：记下这次来的时间，第一次来时留个事件。"""
@@ -168,8 +187,9 @@ class Watchdog(threading.Thread):
             self._scheduled_came(sid, at)
 
     def _tmp_clean(self):
-        """每小时清一次临时文件——已结束、且最后修改超过 tmp_keep_days 天的卡目录。
-        在跑的卡（dispatched / running / queued / interrupted）目录保留：中断的卡还能接着做。"""
+        """每小时清一次过期的临时目录。完成和撤掉的已经当场清过，这里兜住失败和漏网的。
+        在跑、还排着队、中断的卡（dispatched / running / queued / interrupted）不动：中断的卡重派是接着做，
+        对话里提到的脚本和中间文件还在临时目录里。"""
         now = time.time()
         if now - self._last_tmp_clean < 3600:
             return
@@ -181,11 +201,18 @@ class Watchdog(threading.Thread):
             removed = tmpdir.clean(keep, running)
             if removed:
                 self.d.store.event("tmp_cleaned", i18n.t("ev.tmp_cleaned", n=removed))
+            # 结束的卡的运行记录：到天数就压、再到天数就删。压几个 GB 要一会儿，放后台线程
+            runlog.sweep_in_background(self.d.store, on_done=self._logs_swept)
         except Exception as e:  # noqa: BLE001 - 清临时文件坏了不能带崩看门狗
             try:
                 self.d.store.event("watchdog_error", i18n.t("ev.wd.clean_err", err=e))
             except Exception:
                 pass
+
+    def _logs_swept(self, res: dict) -> None:
+        if res.get("gzipped") or res.get("deleted"):
+            self.d.store.event("logs_swept", i18n.t("ev.logs_swept", n=res.get("gzipped", 0), m=res.get("deleted", 0),
+                                                    mb=int((res.get("freed") or 0) / 1048576)))
 
     def _quota_interval(self):
         """设了「每 N 分钟查余量」的工位到点就查（后台线程，不阻塞看门狗）。"""
@@ -203,7 +230,6 @@ class Watchdog(threading.Thread):
         - the 首领 has leader-side work piling up but has been silent too long (summon_leader);
         - a scheduled station whose client-side timer stopped firing.
         Leader-side work (待验收 / 卡住 / 打回待定 / 失败) is between the 首领 and its members: counted in leader_todo, never red."""
-        s = config.settings()
         td = self.d.todo()
         silent_min = None
         if self.d.leader_last_seen:
@@ -211,7 +237,8 @@ class Watchdog(threading.Thread):
                 silent_min = int((_dt.datetime.now().astimezone() - _dt.datetime.fromisoformat(self.d.leader_last_seen)).total_seconds() // 60)
             except ValueError:
                 silent_min = None
-        leader_quiet = td["leader_count"] > 0 and (silent_min is None or silent_min >= int(s.get("wake_min", 30)))
+        # 和页面同一套：多个首领各自算沉默，不拿主首领的时间把别人的待办一起算进去
+        leader_quiet = alerts.leader_quiet(alerts.compute(self.d))
         late = [b["id"] for b in self.d.board() if b.get("scheduled_late")]
         you = int(td["user_count"]) + len(late)
         badge = {"red": bool(you or leader_quiet), "todo": you, "leader_todo": td["leader_count"],

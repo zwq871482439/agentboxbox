@@ -28,6 +28,9 @@ GOOD_CARD = {
 }
 
 
+FAKE_PID = 2147483640
+
+
 class FakeRunner(Runner):
     """Deterministic runner: 'delivered' immediately unless the card title says 'unreachable'."""
     mode = "once"
@@ -41,7 +44,8 @@ class FakeRunner(Runner):
         FakeRunner.started.append((task_id, run_id, card.get("title")))
         pathlib.Path(log_path).write_text(prompt, encoding="utf-8")
         self.alive[run_id] = "unreachable" not in (card.get("title") or "")
-        return RunHandle(run_id=run_id, task_id=task_id, station=self.station, pid=4242, log_path=str(log_path))
+        # 看板会问系统这个进程号还活不活着：用一个不可能存在的号，别撞上本机真进程
+        return RunHandle(run_id=run_id, task_id=task_id, station=self.station, pid=FAKE_PID, log_path=str(log_path))
 
     def delivered(self, handle):
         return self.alive.get(handle.run_id, False)

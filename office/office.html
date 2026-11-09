@@ -258,10 +258,10 @@ const BOX_PARCEL={p:{"?":"#2b2233","1":"#c08a52","2":"#e8d5a8","3":"#a16d3a","4"
    这里只放「画布上看得见的字」；接口回来的文字（状态词、提醒）已经是当前语言。 */
 const I18N_ZH={
 "state.run":"进行中","state.arch":"等待首领","state.you":"需要用户决策","state.idle":"空闲",
-"state.off":"已停用","state.rest":"歇着","state.fail":"失败","state.appr":"审查中",
+"state.off":"已停用","state.rest":"歇着","state.fail":"失败","state.config":"配置有问题","state.appr":"审查中",
 "state.done":"已完成","state.block":"已拦截",
 "phase.day":"白天","phase.dusk":"傍晚","phase.night":"夜晚","phase.dawn":"清晨",
-"alert.summon":"叫醒首领","alert.more":"还有 {n} 条",
+"alert.summon":"叫醒首领","alert.addLeader":"再加一个首领","alert.more":"还有 {n} 条",
 "st.nap":"午睡中","st.meeting":"开会中","st.todoN":"有 {n} 条待办","st.noTodo":"无待办",
 "st.yourCall":"待你拍板","st.waiting":"等待中","st.hasTodo":"有待办","st.hasTodoN":"有待办 {n}",
 "st.delivering":"交活中","st.working":"工作中","st.brew":"煮咖啡中","st.drink":"喝咖啡中",
@@ -337,10 +337,10 @@ const I18N_ZH={
 };
 const I18N_EN={
 "state.run":"Working","state.arch":"Waiting for the leader","state.you":"Needs your call",
-"state.idle":"Idle","state.off":"Disabled","state.rest":"On a break","state.fail":"Failed",
+"state.idle":"Idle","state.off":"Disabled","state.rest":"On a break","state.fail":"Failed","state.config":"Config problem",
 "state.appr":"In review","state.done":"Done","state.block":"Blocked",
 "phase.day":"Day","phase.dusk":"Dusk","phase.night":"Night","phase.dawn":"Dawn",
-"alert.summon":"Wake the leader","alert.more":"{n} more",
+"alert.summon":"Wake the leader","alert.addLeader":"Add another leader","alert.more":"{n} more",
 "st.nap":"Napping","st.meeting":"In a meeting","st.todoN":"{n} to do","st.noTodo":"Nothing to do",
 "st.yourCall":"Your call","st.waiting":"Waiting","st.hasTodo":"Has to-do","st.hasTodoN":"{n} to do",
 "st.delivering":"Delivering","st.working":"Working","st.brew":"Brewing coffee","st.drink":"Drinking coffee",
@@ -483,7 +483,7 @@ applyTr(document);
 const WW=480, LOK=2; let WH=270;  /* 大办公室：16:9，四个区（工位区 / 茶水间 / 沙发区 / 会议室） */               // 世界坐标 360×256；低清画布 2×（屏幕内容可以画到半像素）；猫猫 1 像素 = 1 世界像素
 const STATE={run:["state.run","#3ddc84"],arch:["state.arch","#f5b301"],you:["state.you","#ff4d4f"],idle:["state.idle","#8d8d9b"],
   off:["state.off","#5c5c6b"],rest:["state.rest","#f5b301"],fail:["state.fail","#ff4d4f"],appr:["state.appr","#5aa9ff"],
-  done:["state.done","#8d8d9b"],block:["state.block","#8d8d9b"]};
+  done:["state.done","#8d8d9b"],block:["state.block","#8d8d9b"],config:["state.config","#ff4d4f"]};
 const stateWord=s=>(STATE[s]||["state.idle","#8d8d9b"])[0];   /* 状态词走词表：画布上写的是当前语言 */
 
 /* ===================== 昼夜（assets/design/office-daynight/spec.md，UI 组 ）=====================
@@ -565,19 +565,30 @@ function thawClock(){if(REAL_NOW!==null){Date.now=REAL_NOW;REAL_NOW=null}FROZEN_
     return((t^t>>>14)>>>0)/4294967296}}
   if(ck!==null&&ck!=="")freezeClock(parseInt(ck,10)||0)})();
 
-/* 。
-   第 1 级一条一行「text → action」，最多 3 行，多了写「还有 N 条」；action_id=summon 的那行带「叫醒首领」。 */
+/* 第 1 级一条一行「text → action」，最多 3 行，多了写「还有 N 条」。
+   叫醒首领、再加一个首领这两条带按钮，点了就能去做。 */
 function lvl1Alerts(){return ((DATA&&DATA.alerts)||[]).filter(a=>a&&a.level===1)}
+function alertActionBtn(a, drawer){
+  if(a.action_id==="summon"){
+    const attr=drawer?' id="d-summon"':' data-summon="'+esc(a.station||"")+'"';
+    return '<button type="button"'+attr+">"+TR("alert.summon")+"</button>";
+  }
+  if(a.action_id==="add_leader"){
+    const attr=drawer?' id="d-add-leader"':" data-add-leader";
+    return '<button type="button"'+attr+">"+TR("alert.addLeader")+"</button>";
+  }
+  return "";
+}
 function renderAlertBar(){
   const bar=$("#alertbar");if(!bar)return;const all=lvl1Alerts();
   if(!all.length){bar.hidden=true;bar.innerHTML="";return}
   const rows=all.slice(0,3).map(a=>`<div class="al"><span class="al-t"><b>!</b><span>${esc(a.text||"")}${a.action?" → ":""}
-    <span class="act">${esc(a.action||"")}</span></span></span>
-    ${a.action_id==="summon"?`<button type="button" data-summon="${esc(a.station||"")}">${TR("alert.summon")}</button>`:""}</div>`).join("")
+    <span class="act">${esc(a.action||"")}</span></span></span>${alertActionBtn(a)}</div>`).join("")
     +(all.length>3?`<div class="more">${TR("alert.more",{n:all.length-3})}</div>`:"");
   bar.innerHTML=rows;
   bar.hidden=false;
   bar.querySelectorAll("[data-summon]").forEach(b=>b.onclick=()=>summonLeader(b.getAttribute("data-summon")));
+  bar.querySelectorAll("[data-add-leader]").forEach(b=>b.onclick=()=>openAddLeader());
 }
 /* 「叫醒首领」：复用原横幅「看怎么叫它回来」的逻辑——bx-summon 事件（首页接住开上岗抽屉），没人接就跳 /#summon=。
    嵌在首页 iframe 里时事件发给父页面。 */
@@ -585,6 +596,11 @@ function summonLeader(sid){
   try{const w=(EMBED&&window.parent&&window.parent!==window)?window.parent:window;
     const ev=new w.CustomEvent("bx-summon",{cancelable:true,detail:sid||""});
     if(w.dispatchEvent(ev))w.location.href="/#summon="+encodeURIComponent(sid||"")}catch(e){location.href="/#summon="+encodeURIComponent(sid||"")}
+}
+/* 再加一个首领在工位页。嵌在首页里时跳父页面，别只换掉这一块画布。 */
+function openAddLeader(){
+  try{const w=(EMBED&&window.parent&&window.parent!==window)?window.parent:window;
+    w.location.href="/stations"}catch(e){location.href="/stations"}
 }
 
 /* ===================== 数据：样例 / 实时接口 ===================== */
@@ -1278,7 +1294,7 @@ if(ch.bossAnim==="tea"){if(ch.cup>0)ch.cup--;else if(SKIN.zoned){const [bx,by]=S
   else if(SKIN.zoned&&ch.goal==="meet"){ch.goal=null;ch.deliver=false;wantHome(ch,st==="run"?"type":"sit")}
   else if(SKIN.zoned&&ch.deliver&&st==="idle"){ /* 交活：抱着文件进会议室，TeamLeader 一起验收 */
     if(ch.goal!=="deliver"){leaveBox(ch);ch.carry=true;const [mx,my]=MEET_SEATS[1];goTo(ch,mx,my,true);ch.goal="deliver";ch.after="sit"}}
-  else if(st==="run"||st==="fail"||st==="appr"||st==="you"){wantHome(ch,st==="run"?"type":"sit",st==="run")}
+  else if(st==="run"||st==="fail"||st==="appr"||st==="you"||st==="config"){wantHome(ch,st==="run"?"type":"sit",st==="run")}
   else if(st==="arch"){ /* 等待 / 卡住：坐在自己工位上冒省略号（不再跑去 TeamLeader 旁边站着） */
     if(SKIN.zoned)wantHome(ch,"sit");else{const slot=[[132,132],[234,132]][Object.values(CH).filter(x=>x.state==="arch"&&!x.st.lead).indexOf(ch)%2];
     if(ch.goal!=="wait"){leaveBox(ch);goTo(ch,slot[0],slot[1]);ch.goal="wait";ch.after="wait"}}}
@@ -1349,7 +1365,7 @@ function sceneTick(){napTick();snackTick();meetSceneTick();partyTick()}
 function napIdle(ch){ /* 没活的猫（按猫单独判）：打工猫要空闲；首领没在干活 / 没等拍板就行 */
   const st=ch.state;
   if(SCENE&&PARTY.includes(SCENE.name)&&SCENE.ids.has(ch.id))return false;   /* –庆祝 / 复盘里的猫不睡 */
-  if(st==="off"||st==="run"||st==="fail"||st==="you")return false;
+  if(st==="off"||st==="run"||st==="fail"||st==="you"||st==="config")return false;
   if(ch.pending||ch.deliver||inMeeting(ch))return false;
   if(ch.seatT>0)return false;   /* 收尾：刚开箱的猫先坐满 20 秒，场景（来一局 / 午睡）不拉它，免得一落地就被叫走 */
   return ch.st.lead||st==="idle"}
@@ -1806,6 +1822,7 @@ function statusWord(ch){const st=ch.state,lead=ch.st.lead,k=actKind(ch);
   if(SCENE&&PARTY.includes(SCENE.name)&&SCENE.ids.has(ch.id))return PARTY_WORD[SCENE.name]||TR("st.meeting");   /* –庆祝 / 复盘中 */
   if(lead&&st!=="off"&&st!=="you"){const n=(DATA&&DATA.arch&&DATA.arch.count)||0;return n?TR("st.todoN",{n}):TR("st.noTodo")}
   if(st==="off")return TR("q.off");if(st==="fail")return TR("state.fail");if(st==="appr")return TR("state.appr");
+  if(st==="config")return (ch.data&&ch.data.state_word)||TR("state.config");
   if(st==="rest")return TR("state.rest");   /* 歇着：画布上写短词，完整那句（几点回来）给悬停 */
   if(st==="you")return lead?TR("st.yourCall"):TR("st.waiting");
   if(st==="arch")return lead?(DATA&&DATA.arch&&DATA.arch.count?TR("st.hasTodoN",{n:DATA.arch.count}):TR("st.hasTodo")):TR("st.waiting");
@@ -1834,7 +1851,7 @@ let BUBQ=[], BUBLOG=[];
 /* v2：「想法」= 白底像素气泡（? 等待 / × 失败 / ! 要决策），状态持续多久就挂多久；
    「身体反应」画在猫旁边、不进气泡：Zzz 睡着、汗滴 紧张、♪ 聊天 */
 function thoughtOf(ch){const st=ch.state,lead=ch.st.lead;if(st==="off")return null;
-  if(st==="you")return lead?"bang":"!";if(st==="fail")return"×";
+  if(st==="you")return lead?"bang":"!";if(st==="fail"||st==="config")return"×";
   if(!lead&&DATA&&DATA.leader_quiet&&st==="idle")return"?";   /* 首领没反应，围过去的空闲猫冒 ? */
   if(st==="arch"&&!lead&&!ch.moving)return"…";return null}   /* 卡住 / 打回待定 / 等首领验收 → 省略号 */
 function persistentSym(ch){const th=thoughtOf(ch);if(th)return th;
@@ -2412,7 +2429,7 @@ function openDrawer(id){
   else{const ch=CH[id];if(!ch)return closeDrawer();const d=ch.data,left=d.quota_left_pct;
     const al=lvl1Alerts().find(a=>a.station===id);   /* 点一只头上有 ! 的猫，抽屉最上面也显示它那条提示 */
     const alHtml=al?`<div class="drawer-alert"><b>!</b> ${esc(al.text||"")}${al.action?" → "+esc(al.action):""}${
-    al.action_id==="summon"?`<button type="button" id="d-summon">${TR("alert.summon")}</button>`:""}</div>`:"";
+    alertActionBtn(al,true)}</div>`:"";
     const tk=d.tok&&d.tok.today?`${TR("p.tokenIn",{a:fmt(d.tok.today.in),b:fmt(d.tok.today.out),c:fmt(d.tok.today.cr)})}<br>${
     TR("p.hit",{n:d.tok.today.hit})}${TR("p.sep")}${TR("p.calls",{n:d.tok.today.calls})}`:`<span style="color:var(--dim)">${TR("p.noData")}${
     d.tok&&d.tok.na?TR("p.paren",{v:esc(d.tok.na)}):""}</span>`;
@@ -2428,6 +2445,7 @@ function openDrawer(id){
     html=alHtml+html}
   $("#dbody").innerHTML=html;$("#drawer").classList.add("open");
   const ds=$("#d-summon");if(ds)ds.onclick=()=>summonLeader((lvl1Alerts().find(a=>a.action_id==="summon")||{}).station||"");
+  const da=$("#d-add-leader");if(da)da.onclick=()=>openAddLeader();
 }
 const fmt=n=>n==null?"–":n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":n;
 function chip(s){const v=STATE[s]||[s,"#8d8d9b"];return `<span class="chip" style="color:${v[1]}">${TR(v[0])}</span>`}

@@ -3,11 +3,35 @@ from __future__ import annotations
 
 import json
 
-from . import classify, exchange, gates, i18n, pi_catalog, tasks
-from .dispatcher_const import IFACE_RETRIES, IFACE_WHY, NET_RETRY_KEY, RESUME_AT, RESUME_SESSION, WAIT_BUSY, WAIT_NETWORK, WAIT_REASON_KEY, WAIT_REST
+from . import classify, exchange, fail_why, gates, i18n, pi_catalog, tasks, tmpdir
+from .dispatcher_const import (
+    IFACE_RETRIES,
+    IFACE_WHY,
+    NET_RETRY_KEY,
+    NOTE_FOLLOW_MAX,
+    QUEUE_FRONT,
+    RESUME_AT,
+    RESUME_SESSION,
+    WAIT_BUSY,
+    WAIT_NETWORK,
+    WAIT_REASON_KEY,
+    WAIT_REST,
+)
 from .dispatcher_util import _every_min, _git_head, _hhmm, _who
 from .runners import RunResult
 from .store import now_iso
+
+
+def _json_obj(ev: dict) -> dict:
+    try:
+        data = json.loads(ev.get("json") or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _note_text(notes: list) -> str:
+    return "\n".join(str(n.get("text") or "") for n in notes)
 
 
 class FinishMixin:
@@ -24,6 +48,12 @@ class FinishMixin:
             self._quota_after_run(run["station"])
             self.start_ready_queued()
             return
+        # Pi 猫没有盒子的工具，这一轮里看不到收件箱。正常退出、过质检之前，有新留言就接着同一段对话处理。
+        if (res.exit == 0 and t is not None and t["state"] in ("dispatched", "running")
+                and self._notes_pi(self.station(run["station"]))):
+            if self._try_follow_notes(run, t, res):
+                return
+            self._park_leftover_notes(run, t)
         failed = res.exit != 0
         self._close_run(run_id, res, task_failed=failed and t is not None and t["state"] in ("dispatched", "running"))
         self._quota_after_run(run["station"])
@@ -37,6 +67,83 @@ class FinishMixin:
                                                   suspect=i18n.t("ev.delivered.suspect", self.lang()) if res.status == "suspect" else ""),
                              run["station"], t["id"])
             self._after_delivered(t["id"])
+    def _notes_pi(self, st: dict | None) -> bool:
+        """Pi 一次性开工才由盒子代转留言。会话模式的猫自己会读收件箱。"""
+        return bool(st) and st.get("client") == "pi" and st.get("runner") == "once"
+    def note_receipt(self, receiver: str, lang: str) -> str:
+        """post 的回执：说清楚对方什么时候能看到，不说已经送到。"""
+        st = self.station(receiver) or {}
+        if not self._notes_pi(st):
+            return i18n.t("tool.posted_inbox", lang, sid=receiver)
+        for row in self.store.list_tasks(state="dispatched,running"):
+            if row["assignee"] == receiver:
+                return i18n.t("tool.posted_running", lang, sid=receiver, tid=row["id"])
+        return i18n.t("tool.posted_next", lang, sid=receiver)
+    def _splice_pending_notes(self, st: dict, prompt: str) -> tuple[str, list]:
+        """闲着时的留言拼到说明末尾。先不标已读：进程没拉起来就还留在收件箱。"""
+        notes = self.store.unread_messages(st["id"])
+        if not notes:
+            return prompt, []
+        extra = i18n.t("card.notes.pending", self.lang_of(st["id"]), text=_note_text(notes))
+        return prompt + "\n\n" + extra, notes
+    def _note_follow_count(self, t: dict) -> int:
+        rnd = int(t.get("round") or 1)
+        n = 0
+        for ev in self.store.events_by_kind(t["id"], "note_follow"):
+            if int(_json_obj(ev).get("round") or 0) == rnd:
+                n += 1
+        return n
+    def _try_follow_notes(self, run: dict, t: dict, res: RunResult) -> bool:
+        """有未读留言就用 --continue 接着跑。同一轮、不加轮数。接不上（到了次数 / 没有留言）返回 False。
+        这一轮的运行已经收掉时返回 True，调用方不要再按交回记账。"""
+        if self._note_follow_count(t) >= NOTE_FOLLOW_MAX:
+            return False
+        notes = self.store.unread_messages(run["station"], since=str(run.get("started") or ""))
+        if not notes:
+            return False
+        st = self.station(run["station"])
+        runner = self.runner_for(st) if st else None
+        if runner is None:
+            return False
+        card = dict(t.get("card") or {})
+        # 只这一次接着上次的对话：不写回卡，打回重派仍是新开一段
+        card[RESUME_SESSION] = self._session_dir_of(run)
+        prompt = i18n.t("card.notes.follow", self.lang_of(st["id"]), text=_note_text(notes))
+        self._close_run(run["run_id"], res, task_failed=False)
+        self._quota_after_run(run["station"])
+        out = self._launch(st, runner, t["id"], card, attempt=int(t.get("round") or 1), prompt=prompt, take_notes=False)
+        fresh = self.store.get_task(t["id"]) or {}
+        if fresh.get("state") in ("dispatched", "running") and out.get("code") == "delivered":
+            self.store.mark_messages_read([n["id"] for n in notes])
+            self.store.event("note_follow", i18n.t("ev.note_follow", self.lang(), n=len(notes)),
+                             run["station"], t["id"], data={"round": int(t.get("round") or 1), "n": len(notes)})
+            return True
+        self.start_ready_queued()
+        return True
+    def _park_leftover_notes(self, run: dict, t: dict) -> None:
+        """这一轮已经接满两次：剩下的留言不再跟，交回时在待办里告诉首领。"""
+        if self._note_follow_count(t) < NOTE_FOLLOW_MAX:
+            return
+        notes = self.store.unread_messages(run["station"], since=str(run.get("started") or ""))
+        if not notes:
+            return
+        texts = [str(n.get("text") or "") for n in notes]
+        self.store.mark_messages_read([n["id"] for n in notes])
+        self.store.event("notes_left", i18n.t("todo.notes_left", self.lang(), n=len(notes)),
+                         run["station"], t["id"], data={"n": len(notes), "texts": texts})
+    def _notes_left_reason(self, task_id: str, lg: str) -> str:
+        rows = self.store.events_by_kind(task_id, "notes_left")
+        if not rows:
+            return ""
+        data = _json_obj(rows[-1])
+        n = int(data.get("n") or 0)
+        if n <= 0:
+            return ""
+        reason = i18n.t("todo.notes_left", lg, n=n)
+        texts = [str(x) for x in (data.get("texts") or []) if str(x).strip()]
+        if texts:
+            reason = reason + "\n" + "\n".join(texts)
+        return reason
     def _heal_compat(self, run_id: str, run: dict, t: dict, res: RunResult) -> bool:
         """服务商回话里写明这个模型要哪个兼容开关（比如要自适应思考）：记进工位设置，这张卡马上照新设置重跑。
         同一个开关只改一次——改过了还报一样的错，就照常记失败。"""
@@ -142,15 +249,16 @@ class FinishMixin:
                          run["station"], t["id"])
     def _close_run(self, run_id: str, res: RunResult, task_failed: bool) -> None:
         run = self.store.get_run(run_id)
-        if run is None:
-            return
+        if run is None or run.get("status") == "cancelled":
+            return                                 # 撤掉已经收成 cancelled，后到的收尾不能再改成失败
         rng = run.get("commit_range")
         if rng and rng.endswith(".."):
             head = _git_head(run.get("worktree"))
             rng = rng + (head or "")
         self.store.update_run(run_id, ended=now_iso(), exit=res.exit, status=res.status, commits=res.commits, dirty=res.dirty,
                               commit_range=rng,
-                              tokens_json=json.dumps(res.tokens) if res.tokens else None, error=res.error or None)
+                              tokens_json=json.dumps(res.tokens) if res.tokens else None, error=res.error or None,
+                              split_json=json.dumps(res.split, ensure_ascii=False) if res.split else None)
         if res.tokens and res.tokens.get("source"):
             from . import tokens as _tok
             _tok.record(self.store, run, res.tokens)
@@ -158,14 +266,28 @@ class FinishMixin:
         self.run_owners.pop(run_id, None)
         self.store.station_touch(run["station"], state="idle", task_id=None, since=now_iso())
         if task_failed:
-            # 没跑成的卡把给用户看的原因写进 returned_reason：有错误信息用它；
-            # 进程跑了但退出码非 0、事件流里又没有错误信息（被外部结束掉）→ 写明是被结束、退出码多少
+            # 密钥不对 / 模型 id 不存在不会自己好：工位退出可派名单，待办写明是配置问题。
+            # 其余：调过工具的写清断在哪；一个工具都没调的照旧（有错误信息用它，没有就写被结束、退出码多少）
             lg = self.lang()
-            why = str(res.error or "").strip() or i18n.t("ack.proc_killed", lg, exit=res.exit)
+            raw = str(res.error or "").strip()
+            if self._config_failure(res):
+                quote = self.config_quote(raw)
+                why = i18n.t("todo.config_bad", lg, sid=run["station"],
+                             why=quote or i18n.t("ack.config_no_why", lg))
+                self.mark_config_bad(run["station"], raw)
+                text, data = why, {"config": True}
+            else:
+                task = self.store.get_task(run["task_id"]) or {}
+                built = fail_why.for_failure(run, res, task.get("card") or {}, lg, run["station"])
+                if built is None:
+                    why = raw or i18n.t("ack.proc_killed", lg, exit=res.exit)
+                    text = i18n.t("ev.failed", lg, sid=run["station"], exit=res.exit,
+                                  err=i18n.t("ev.failed.err", lg, err=res.error) if res.error else "")
+                    data = None
+                else:
+                    why, text, data = built["reason"], built["event"], built["data"]
             self.store.update_task(run["task_id"], state="failed", returned_reason=why)
-            self.store.event("failed", i18n.t("ev.failed", lg, sid=run["station"], exit=res.exit,
-                                              err=i18n.t("ev.failed.err", lg, err=res.error) if res.error else ""),
-                             run["station"], run["task_id"])
+            self.store.event("failed", text, run["station"], run["task_id"], data=data)
         self._maybe_write_idle(run["station"], run["task_id"])
     def _quota_after_run(self, station_id: str) -> None:
         """工位设了「每轮跑完查一次」→ 起线程查余量，不阻塞收尾。坏了不影响派活。"""
@@ -247,22 +369,51 @@ class FinishMixin:
         card = dict(t["card"])
         max_rounds = int((card.get("acceptance") or {}).get("max_rounds") or 2)
         if int(t["round"]) >= max_rounds and not force:
-            self.store.update_task(task_id, state="returned", returned_reason=note)
+            # 到了上限不再自动开工，但这次的说明要写进卡：之后重派读的是卡，不是上一轮留下的旧话
+            card["returned_reason"] = note or ""
+            tasks.write_card(task_id, card)
+            self.store.update_task(task_id, state="returned", returned_reason=note or "",
+                                   card_json=json.dumps(card, ensure_ascii=False))
             self.store.event("review", i18n.t("ev.review_max", lg, by=_who(by, lg), n=max_rounds, note=note or ""), by, task_id,
-                              data={"verdict": "return_max", "to": t["assignee"], "round": max_rounds})
+                              data={"verdict": "return_max", "to": t["assignee"], "round": max_rounds, "landed": "pending"})
             return self._ack("ok", i18n.t("ack.returned_max", lg), state="returned")
         card["round"] = int(t["round"]) + 1
         card["returned_reason"] = note or ""
         card.pop(NET_RETRY_KEY, None)   # 首领发起新一轮：接口断的自动重试计数重新数
         tasks.write_card(task_id, card)
         self.store.update_task(task_id, state="dispatched", round=card["round"], returned_reason=note, card_json=json.dumps(card, ensure_ascii=False))
-        self.store.event("review", i18n.t("ev.review_round", lg, by=_who(by, lg), n=card["round"], note=note or ""), by, task_id,
-                          data={"verdict": "return", "to": t["assignee"], "round": card["round"]})
         st = self.station(t["assignee"])
         runner = self.runner_for(st) if st else None
         if runner is None:
+            self._note_return(by, task_id, t["assignee"], card["round"], note, "redispatched")
             return self._ack("no_runner", i18n.t("ack.returned_no_runner", lg, sid=t["assignee"]), state="dispatched")
-        return self._launch(st, runner, task_id, card, attempt=card["round"])
+        # 打回重派和接着做同一套开工检查：猫忙或歇着就排队，不另起进程
+        out = self._launch_resume(st, runner, task_id, card, attempt=card["round"])
+        if out.get("queued"):
+            saved = dict((self.store.get_task(task_id) or {}).get("card") or {})
+            if saved.get(WAIT_REASON_KEY) in (WAIT_BUSY, WAIT_REST):
+                saved[QUEUE_FRONT] = True
+                tasks.write_card(task_id, saved)
+                self.store.update_task(task_id, card_json=json.dumps(saved, ensure_ascii=False))
+                out["text"] = self._returned_queue_text(st["id"], task_id)
+        fresh = self.store.get_task(task_id) or {}
+        # 开工结果出来再记：猫忙或接口不通时卡是排队，不能假设一定已经开工
+        landed = "queued" if fresh.get("state") == "queued" else "redispatched"
+        self._note_return(by, task_id, t["assignee"], card["round"], note, landed)
+        return out
+    def _note_return(self, by: str, task_id: str, assignee: str, rnd: int, note: str, landed: str) -> None:
+        """打回事件记下落地（已重派 / 已排队）。写在开工或排队之后，给首领的摘要才能按真实状态说。"""
+        lg = self.lang()
+        self.store.event("review", i18n.t("ev.review_round", lg, by=_who(by, lg), n=rnd, note=note or ""), by, task_id,
+                         data={"verdict": "return", "to": assignee, "round": rnd, "landed": landed})
+    def _returned_queue_text(self, station_id: str, task_id: str) -> str:
+        """打回没马上开工：回执写排在谁后面，不说已送达。"""
+        lg = self.lang()
+        ahead = [row["id"] for row in self.store.list_tasks(state="dispatched,running")
+                 if row["assignee"] == station_id and row["id"] != task_id]
+        if ahead:
+            return i18n.t("ack.returned_queued", lg, ahead=i18n.t("card.list_sep", lg).join(ahead))
+        return i18n.t("ack.returned_wait", lg, sid=station_id)
     def _on_accept(self, task_id: str) -> None:
         t = self.store.get_task(task_id)
         oa = (t.get("card") or {}).get("on_accept") or {"action": "none"}
@@ -271,3 +422,4 @@ class FinishMixin:
         self.store.event("done", i18n.t("ev.done", self.lang(),
                                         oa=i18n.t("ev.done_oa", self.lang(), a=oa.get("action")) if oa.get("action", "none") != "none" else ""),
                          t["assignee"], task_id)
+        tmpdir.remove_card(task_id)          # 验收通过：这张卡的临时目录没用了，马上清

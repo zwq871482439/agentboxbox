@@ -49,6 +49,7 @@ ZH = {
     "office.scene.dismissed": "关掉了{name}：{subject}",
     "office.scene.unknown": "不认识的邀请：{id}",
     "office.standup": "同一个目标 10 分钟内派出 {n} 张卡，开站会：{stations}",
+    "office.state.config": "配置有问题",
 }
 
 EN = {
@@ -66,7 +67,7 @@ EN = {
     "office.state.unstarted": "Never started",
     "office.runner.manual": "You open the chat in your AI app",
     "office.runner.once": "Runs with an API key",
-    "office.runner.scheduled": "Session mode: your AI app checks in on a timer",
+    "office.runner.scheduled": "Check-in mode: your AI app checks in on a timer",
     "office.todo.reviewing": "Waiting for review",
     "office.todo.blocked": "Stuck",
     "office.todo.returned": "Sent back, awaiting decision",
@@ -98,4 +99,5 @@ EN = {
     "office.scene.dismissed": "closed {name}: {subject}",
     "office.scene.unknown": "unknown invite: {id}",
     "office.standup": "the same goal got {n} cards within 10 minutes, stand-up: {stations}",
+    "office.state.config": "Config problem",
 }

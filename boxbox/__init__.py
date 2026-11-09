@@ -5,4 +5,4 @@ Local-only scheduler: one core process (HTTP on 127.0.0.1), thin facades
 Standard library only. See docs/架构设计.md.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

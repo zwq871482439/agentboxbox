@@ -6,25 +6,28 @@ review() -> 首领验收：收下还是打回。
 on_run_finished() -> 运行器进程结束时由看门狗调用。
 
 各块细节拆在 dispatcher_assign.py（派卡 / 排队）、dispatcher_finish.py（收尾）、
-dispatcher_interrupt.py（中断 / 接着做）、dispatcher_rest.py（歇着）、dispatcher_board.py（看板 / 待办）。
+dispatcher_interrupt.py（中断 / 接着做）、dispatcher_rest.py（歇着）、dispatcher_board.py（看板 / 待办）、
+dispatcher_stall.py（撤卡停进程、命令跑太久）。
 """
 from __future__ import annotations
 
 import json
 import threading
 
-from . import config, i18n, procjob, tasks
+from . import config, i18n, procjob, tasks, tmpdir
 from . import feedback as _feedback
 from .dispatcher_assign import AssignMixin
 from .dispatcher_board import BoardMixin
 from .dispatcher_const import (
     ASKED_KV,
+    CONFIG_KV,
     CONFLICT_STATES,
     IFACE_RETRIES,
     INT_CRASH,
     INT_EXIT,
     INTERRUPT_KIND,
     NET_RETRY_KEY,
+    QUEUE_FRONT,
     REST_BACKOFF,
     REST_KV,
     REST_REASONS,
@@ -32,6 +35,7 @@ from .dispatcher_const import (
     RESUME_AT,
     RESUME_SESSION,
     WAIT_BUSY,
+    WAIT_CONFIG,
     WAIT_LEGACY,
     WAIT_NETWORK,
     WAIT_REASON_KEY,
@@ -40,18 +44,19 @@ from .dispatcher_const import (
 from .dispatcher_finish import FinishMixin
 from .dispatcher_interrupt import InterruptMixin
 from .dispatcher_rest import RestMixin
+from .dispatcher_stall import StallMixin
 from .dispatcher_util import _prepare_resume, _runner_mode, _who
 from .runners import RunHandle, RunResult, make_runner
 from .store import Store, now_iso
 
 __all__ = [
-    "Dispatcher", "ASKED_KV", "CONFLICT_STATES", "IFACE_RETRIES", "INT_CRASH", "INT_EXIT", "INTERRUPT_KIND",
-    "NET_RETRY_KEY", "RESUME_AT", "RESUME_SESSION", "REST_BACKOFF", "REST_KV", "REST_REASONS", "REST_TRY_KV",
-    "WAIT_BUSY", "WAIT_LEGACY", "WAIT_NETWORK", "WAIT_REASON_KEY", "WAIT_REST",
+    "Dispatcher", "ASKED_KV", "CONFIG_KV", "CONFLICT_STATES", "IFACE_RETRIES", "INT_CRASH", "INT_EXIT",
+    "INTERRUPT_KIND", "NET_RETRY_KEY", "RESUME_AT", "RESUME_SESSION", "REST_BACKOFF", "REST_KV", "REST_REASONS",
+    "REST_TRY_KV", "WAIT_BUSY", "WAIT_CONFIG", "WAIT_LEGACY", "WAIT_NETWORK", "WAIT_REASON_KEY", "WAIT_REST",
             ]
 
 
-class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin):
+class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin, StallMixin):
     def __init__(self, store: Store):
         self.store = store
         self.runners = {}
@@ -137,17 +142,18 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
             self.store.event("core_interrupt", i18n.t("ev.core_interrupt", self.lang(), n=n))
         return n
     def touch_leader(self, who: str | None) -> str | None:
-        """首领动了一下：kv 和 stations_state 一起记同一个时间。
-        看板 / 办公室那行的「最近活动」读 stations_state，沉默提醒读 kv：两处各记各的，
-        首领一直在调工具但看板上的最近活动停在很久之前。现在一处写、两处读，时间也一样。
+        """首领动了一下：这个工位的最近活动记在 stations_state。
+        全局 leader_last_seen 只跟主首领走，这样只有一个首领时和原来一样；
+        别的首领只更新自己那一行，免得一个在干活把另一个的沉默冲掉。
         返回记下的时间（不是首领返回 None）。"""
-        if who and who == config.leader_id():
-            now = now_iso()
+        if not (who and config.is_leader(who)):
+            return None
+        now = now_iso()
+        if who == config.leader_id():
             self.leader_last_seen = now
             self.store.kv_set("leader_last_seen", now)
-            self.store.station_touch(who, last_seen=now)
-            return now
-        return None
+        self.store.station_touch(who, last_seen=now)
+        return now
     def report(self, task_id: str, status: str, summary: str, by: str) -> dict:
         lg = self.lang()
         if not tasks.TASK_ID_RE.match(task_id or ""):
@@ -155,7 +161,7 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
         t = self.store.get_task(task_id)
         if t is None:
             return self._ack("bad_task_id", i18n.t("ack.no_task", lg, tid=task_id))
-        if by and t["assignee"] != by and by != config.leader_id():
+        if by and t["assignee"] != by and not config.is_leader(by):
             return self._ack("forbidden", i18n.t("ack.forbidden_station", lg, by=by))
         if status not in ("heartbeat", "done", "blocked", "issue"):
             return self._ack("bad_state", i18n.t("ack.bad_status", lg))
@@ -203,6 +209,9 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
                 r = _feedback.add(t["assignee"], feedback, task_id, store=self.store,
                                   lang=self.lang_of(t["assignee"]))
                 out["feedback"] = "recorded" if r["recorded"] else r["why"]
+                if not r["recorded"]:
+                    # 只回一个 off 首领看不懂：说清楚是开关关着、谁能开
+                    out["feedback_text"] = i18n.t("ack.feedback." + str(r["why"] or "empty"), self.lang())
         return out
     def _review(self, task_id: str, verdict: str, note: str, by: str) -> dict:
         self.touch_leader(by)
@@ -228,10 +237,11 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
             return self._ack("ok", i18n.t("ack.approved", lg), state="done")
         # leader 对一张已经 returned / interrupted 的卡再打回 = 明确要再来一轮，max_rounds 不再拦
         return self._return_task(t, note, by, force=(t["state"] in ("returned", "interrupted")))
-    def resolve(self, task_id: str, action: str, note: str, by: str) -> dict:
-        """首领拍板一张 failed / interrupted / blocked 的卡：redispatch 原卡原工位再走一次正常的开工检查和
-        送达回执（不翻轮次；max_rounds 不拦——这不算打回），cancel 进 cancelled、不再出现在待办。
-        只有这张卡的 dispatcher 能调，别人（别的工位 / 不是首领）回 forbidden。"""
+    def resolve(self, task_id: str, action: str, note: str, by: str, station: str = "") -> dict:
+        """首领拍板一张 failed / interrupted / blocked / returned 的卡：redispatch 再走一次开工检查和
+        送达回执。带了 station 就改派给那只猫，卡号不变。打回待定再派算新的一轮（round+1，带上最新的打回说明）；
+        其余不翻轮次。cancel 进 cancelled、不再出现在待办。在跑或已派出的卡会停掉这次运行的整棵进程。
+        只有这张卡的 dispatcher 能调，别人回 forbidden。"""
         self.touch_leader(by)
         lg = self.lang()
         if not tasks.TASK_ID_RE.match(task_id or ""):
@@ -247,24 +257,34 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
         if nxt is None:
             return self._ack("bad_state", i18n.t("ack.cannot_resolve", lg, state=t["state"]), state=t["state"])
         if action == "cancel":
-            self.store.update_task(task_id, state="cancelled", returned_reason=note or t["returned_reason"])
-            self.store.event("cancelled", i18n.t("ev.cancelled", lg, by=_who(by, lg), tid=task_id,
-                                                  note=note or i18n.t("ev.cancelled.note", lg)), by, task_id)
-            # 撤掉了最后一张排队的卡：猫没什么可等的了，回来（歇着状态清掉）
-            if not any(x["assignee"] == t["assignee"] for x in self.store.list_tasks(state="queued")):
-                self.clear_resting(t["assignee"])
-            return self._ack("ok", i18n.t("ack.cancelled", lg), state="cancelled")
-        st = self.station(t["assignee"])
+            # 在跑的卡要停进程；说明记在 cancel_note，不进 returned_reason
+            return self.cancel_task(t, task_id, note, by)
+        target = str(station or "").strip() or t["assignee"]
+        moved_from = t["assignee"] if target != t["assignee"] else ""
+        st = self.station(target)
         if st is None:
-            return self._ack("station_unknown", i18n.t("ack.gone_station", lg, sid=t["assignee"]),
+            return self._ack("station_unknown", i18n.t("ack.gone_station", lg, sid=target),
                              task_id=task_id, state=t["state"])
+        if moved_from and st.get("role") != "member":
+            return self._ack("not_member", i18n.t("ack.not_member", lg, sid=target))
+        if moved_from and not st.get("enabled", True):
+            return self._ack("station_disabled", i18n.t("ack.station_disabled", lg, sid=target), exit=14)
         runner = self.runner_for(st)
         if runner is None:
-            return self._ack("no_runner", i18n.t("ack.no_runner2", lg, sid=t["assignee"]), state=t["state"])
+            return self._ack("no_runner", i18n.t("ack.no_runner2", lg, sid=target), state=t["state"])
         card = dict(t["card"] or {})
+        card["assignee"] = target
         card.pop(NET_RETRY_KEY, None)   # 首领重派：接口断的自动重试计数重新数
         card.pop(WAIT_REASON_KEY, None)  # 重派是重新开工：旧的排队标记不算数
-        if note:
+        attempt = int(t["round"] or 1)
+        returned = t["state"] == "returned"
+        if returned:
+            # 停在打回待定后再派是新的一轮：轮次 +1，说明用这次写的，没写就用卡上最新那条
+            attempt += 1
+            card["round"] = attempt
+            latest = str(note or "").strip() or str(card.get("returned_reason") or t.get("returned_reason") or "")
+            card["returned_reason"] = latest
+        elif note:
             card["returned_reason"] = note
         # 首领重派一张中断的卡 = 接着做：上次的对话记录还在就接着做（--continue），不在就从头开始
         if t["state"] == "interrupted":
@@ -274,27 +294,44 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
                 self.store.event("resume", i18n.t("ev.resume_no_session", lg, title=t["title"],
                                                   why=i18n.t("why.no_session", lg)), by, task_id)
         tasks.write_card(task_id, card)
-        self.store.update_task(task_id, state="dispatched", returned_reason=note or None,
-                               card_json=json.dumps(card, ensure_ascii=False))
-        self.store.event("resolve", i18n.t("ev.resolve", lg, by=_who(by, lg), tid=task_id,
-                                           note=note or i18n.t("ev.resolve.note", lg)), by, task_id)
+        upd = {"state": "dispatched", "assignee": target, "returned_reason": note or None,
+               "card_json": json.dumps(card, ensure_ascii=False)}
+        if returned:
+            upd["round"] = attempt
+            upd["returned_reason"] = card.get("returned_reason") or None
+        self.store.update_task(task_id, **upd)
+        shown = (card.get("returned_reason") if returned else note) or i18n.t("ev.resolve.note", lg)
+        if moved_from:
+            text = i18n.t("ev.resolve_move", lg, by=_who(by, lg), tid=task_id,
+                          old=moved_from, sid=target, note=shown)
+            self.store.event("resolve", text, by, task_id, data={"from": moved_from, "to": target})
+        else:
+            self.store.event("resolve", i18n.t("ev.resolve", lg, by=_who(by, lg), tid=task_id, note=shown), by, task_id)
+        if t["state"] == "failed" and not card.get(RESUME_SESSION):
+            # 失败的卡留着是为了查；首领拍板从头重派，旧的临时目录没用了。
+            # 中断的卡重派是接着那段对话做，对话里提到的脚本和中间文件还在临时目录里，不能删
+            tmpdir.remove_card(task_id)
         # 这只猫在歇着（额度用完 / 被限流 / 接口连不上）：这张卡排队等它回来
         if not self._rest_ok_to_start(st):
-            card[WAIT_REASON_KEY] = self._rest_wait_key(t["assignee"])
+            if returned:
+                card[QUEUE_FRONT] = True
+            card[WAIT_REASON_KEY] = self._rest_wait_key(target)
             tasks.write_card(task_id, card)
             self.store.update_task(task_id, state="queued", card_json=json.dumps(card, ensure_ascii=False))
-            text = self.queue_text(dict(t, card=card))
-            self.store.event("queued", text, t["assignee"], task_id)
+            text = self.queue_text(dict(t, assignee=target, card=card))
+            self.store.event("queued", text, target, task_id)
             return self._ack("queued", text, task_id=task_id, state="queued", queued=True)
         # 一只猫同一时间只跑一张卡：它手上已经有在跑的卡 → 这张排队等它干完
-        if getattr(runner, "mode", "") != "scheduled" and self._busy_wait(t["assignee"], exclude=task_id):
-            text = i18n.t("board.queue.busy", lg, sid=t["assignee"])
+        if getattr(runner, "mode", "") != "scheduled" and self._busy_wait(target, exclude=task_id):
+            if returned:
+                card[QUEUE_FRONT] = True
+            text = i18n.t("board.queue.busy", lg, sid=target)
             card[WAIT_REASON_KEY] = WAIT_BUSY
             tasks.write_card(task_id, card)
             self.store.update_task(task_id, state="queued", card_json=json.dumps(card, ensure_ascii=False))
-            self.store.event("queued", text, t["assignee"], task_id)
+            self.store.event("queued", text, target, task_id)
             return self._ack("queued", text, task_id=task_id, state="queued", queued=True)
-        return self._launch(st, runner, task_id, card, attempt=int(t["round"] or 1))
+        return self._launch(st, runner, task_id, card, attempt=attempt)
     def _alive_stations(self) -> set[str]:
         """进程还在跑的工位：这些猫不许显示失败 / 离线。"""
         out: set[str] = set()

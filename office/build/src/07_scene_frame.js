@@ -48,7 +48,7 @@ function sceneTick(){napTick();snackTick();meetSceneTick();partyTick()}
 function napIdle(ch){ /* 没活的猫（按猫单独判）：打工猫要空闲；首领没在干活 / 没等拍板就行 */
   const st=ch.state;
   if(SCENE&&PARTY.includes(SCENE.name)&&SCENE.ids.has(ch.id))return false;   /* –庆祝 / 复盘里的猫不睡 */
-  if(st==="off"||st==="run"||st==="fail"||st==="you")return false;
+  if(st==="off"||st==="run"||st==="fail"||st==="you"||st==="config")return false;
   if(ch.pending||ch.deliver||inMeeting(ch))return false;
   if(ch.seatT>0)return false;   /* 收尾：刚开箱的猫先坐满 20 秒，场景（来一局 / 午睡）不拉它，免得一落地就被叫走 */
   return ch.st.lead||st==="idle"}

@@ -4,7 +4,7 @@
 都是在 /api/tokens 出口现算，不进账本。"""
 from __future__ import annotations
 
-from . import config, i18n
+from . import config, i18n, quota
 
 PRECISE_SOURCES = {"pi_json", "pi_session", "zcode_usage", "claude_json", "codex_json"}
 
@@ -65,18 +65,18 @@ def summary(store, days: int = 7, lang: str | None = None) -> dict:
     for r in rows:
         st = stations.get(r["station"])
         r["cost_est"] = cost_est(st or {}, r)
-        r["quota"] = store.kv_get("quota:" + r["station"])
+        r["quota"] = quota.read(store, st)
     # 还没跑过活但查过余量的 Pi 工位也列出来（用量区看得到余量）
     for sid, st in sorted(stations.items()):
         if sid in counted or st.get("client") != "pi":
             continue
-        q = store.kv_get("quota:" + sid)
+        q = quota.read(store, st)
         if not q:
             continue
         rows.append({"station": sid, "runs": 0, "tok_in": 0, "tok_out": 0, "tok_cr": 0, "tok_cw": 0,
                      "cost": None, "cost_est": None, "quota": q})
-    # 额度按服务商算一份：同一服务商（同一把 key）的几个工位，余量只显示一份，其余标明跟谁共用
-    by_group: dict[tuple, list[dict]] = {}
+    # 用量页上一份额度只画一次：同一额度账户的几个工位，余量只显示一份，其余标明跟谁共用
+    by_group: dict[str, list[dict]] = {}
     for r in rows:
         g = _quota_group(stations.get(r["station"]) or {})
         if g:
@@ -99,12 +99,8 @@ def summary(store, days: int = 7, lang: str | None = None) -> dict:
     return {"since": since, "stations": rows, "not_counted": not_counted, "note": note}
 
 
-def _quota_group(st: dict) -> tuple | None:
-    """能共用一份额度的工位归成一组：(服务商, key)；不是 Pi 工位或设不出服务商 → None（不归组）。"""
-    if not st or st.get("client") != "pi":
+def _quota_group(st: dict) -> str | None:
+    """用量页上一份额度只画一次。归到额度账户上；没有 key 的不归组（各自的数还在）。"""
+    if not st or st.get("client") != "pi" or not quota.station_key(st):
         return None
-    from . import providers
-    p = providers.station_provider(st)
-    if not p:
-        return None
-    return (p, config.get_secret(str(st.get("id") or "")) or "")
+    return quota.account_id(st)

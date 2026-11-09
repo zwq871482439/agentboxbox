@@ -4,10 +4,10 @@ from __future__ import annotations
 import datetime as _dt
 import re
 
-from .. import __version__, config, i18n, tasks, tmpdir
+from .. import __version__, config, i18n, leader_sessions, stall, tasks, tmpdir
 from ..store import now_iso
 from .http_const import _HHMM, ROLE_ALIASES, RUNNING_STATES, SETTINGS_BOOLS, SETTINGS_INTS, TOOLS
-from .http_leader import _leader_new, _wait_for_update
+from .http_leader import _cancelled, _leader_new, _wait_for_update, drop_held, finish_delivery
 
 
 class Core:
@@ -16,7 +16,7 @@ class Core:
     def __init__(self, dispatcher):
         self.d = dispatcher
 
-    def call(self, tool: str, station: str, args: dict, transport: str = "") -> dict:
+    def call(self, tool: str, station: str, args: dict, transport: str = "", session: str = "") -> dict:
         d = self.d
         args = args or {}
         lg = d.lang_of(station) if hasattr(d, "lang_of") else i18n.lang()
@@ -32,6 +32,9 @@ class Core:
         if role == "leader":
             # 首领每个工具调用都算「最近活动」：看板 / 办公室那行跟着走，沉默提醒不会误报
             d.touch_leader(station)
+            # 空号不参与：缺头、不认识的号都照常往下走，只是不算「两个对话」
+            if str(session or "").strip():
+                leader_sessions.note(d, station, str(session).strip())
         if tool == "get_briefing":
             # 第一次握手：这个工位从没来过 → 记 first_seen + 发事件；任何角色都记。
             # 先记再出简报：简报里附的看板才会把它自己写成「在岗」而不是「没连上」
@@ -44,7 +47,7 @@ class Core:
         elif tool == "get_todo":
             if role != "leader":
                 return {"ok": False, "code": "forbidden", "text": i18n.t("tool.leader_only", lg, tool="get_todo")}
-            out = dict(ok=True, **d.todo())
+            out = dict(ok=True, **d.todo(station))
         elif tool == "get_task":
             tid = str(args.get("task_id") or args.get("id") or "")
             if not tasks.TASK_ID_RE.match(tid):
@@ -63,7 +66,8 @@ class Core:
             out = d.review(str(args.get("task_id") or ""), str(args.get("verdict") or ""), str(args.get("note") or ""), station,
                            feedback=str(args.get("feedback") or ""))
         elif tool == "resolve":
-            out = d.resolve(str(args.get("task_id") or ""), str(args.get("action") or ""), str(args.get("note") or ""), station)
+            out = d.resolve(str(args.get("task_id") or ""), str(args.get("action") or ""),
+                            str(args.get("note") or ""), station, str(args.get("station") or ""))
         elif tool == "report":
             out = d.report(str(args.get("task_id") or ""), str(args.get("status") or ""), str(args.get("summary") or ""), station)
         elif tool == "post":
@@ -72,14 +76,14 @@ class Core:
                 return {"ok": False, "code": "station_unknown", "text": i18n.t("tool.no_receiver", lg)}
             d.store.post_message(station, to, str(args.get("text") or ""))
             d.store.event("post", i18n.t("ev.post", lg, by=station, to=to), station, data={"to": to})
-            out = {"ok": True, "text": i18n.t("tool.posted", lg)}
+            out = {"ok": True, "text": d.note_receipt(to, lg)}
         elif tool == "wait_for_update":
             if role != "leader":
                 return {"ok": False, "code": "forbidden", "text": i18n.t("tool.leader_only", lg, tool="wait_for_update")}
             out = _wait_for_update(d, station, args)
         else:  # read_inbox
             out = {"ok": True, "messages": d.store.read_inbox(station)}
-        n = d.nudge()
+        n = d.nudge(station if role == "leader" else None)
         if role == "leader":
             # 上岗话瘦身到 4 句以后，首领的规则靠每次工具回话里的 _boxbox 持续提醒（打工猫不带）。
             # 经 /mcp 按地址连上来的（没发 initialize 的 HTTP 兜底）多带 http_tips，
@@ -96,11 +100,21 @@ class Core:
             if n:
                 box["nudge"] = n
             evs = _leader_new(d, station)
-            if evs:
+            if _cancelled():
+                # 客户端已经取消：这回话里带的事件不算送到
+                out.pop("events", None)
+                if out.get("code") == "update":
+                    out["code"] = "none"
+                    out["text"] = i18n.t("leader.no_news", lg)
+                drop_held()
+            elif evs:
                 box["events"] = evs
+            if leader_sessions.shared(d, station):
+                box["shared"] = i18n.t("leader.shared", lg, station=station)
             out["_boxbox"] = box
         elif n:
             out["_boxbox"] = {"nudge": n}
+        finish_delivery(d.store)
         return out
 def normalize_role(role):
     """TeamLeader / 首领 → leader，Team Member / 打工猫 → member；认不出的原样返回（交给校验报错）。"""
@@ -164,12 +178,16 @@ def http_tips(lang: str | None = None) -> str:
 def _task_view(store, t: dict, d=None) -> dict:
     v = {k: t.get(k) for k in ("id", "title", "kind", "assignee", "state", "round", "dispatcher", "created_at", "updated_at",
                                  "delivered_at", "done_at", "returned_reason")}
+    v["cancel_note"] = t.get("cancel_note") or ""
     v["interrupt_reason"] = t.get("returned_reason") if t.get("state") == "interrupted" else None
-    v["card"] = t.get("card")
-    v["wait_reason"] = (t.get("card") or {}).get("wait_reason")   # 排队原因（等这只猫腾出手 / 等接口 / 等歇着的猫回来）
-    v["wait_text"] = (d.queue_text(t) if d is not None else "")   # 排队写清楚等谁（看板 / 待办 / 办公室同一句）
-    v["runs"] = [{k: r.get(k) for k in ("run_id", "attempt", "runner", "pid", "started", "ended", "exit", "status",
-                                        "commits", "tokens_json")} for r in store.runs_for_task(t["id"])]
+    card = t.get("card")
+    if isinstance(card, dict):
+        card = dict(card)
+        card["state"] = t.get("state")   # 快照停在派出去那一刻，跟任务表对不上会让首领以为还在排队
+    v["card"] = card
+    v["wait_reason"] = (card or {}).get("wait_reason") if isinstance(card, dict) else None
+    v["wait_text"] = (d.wait_text(t) if d is not None else "")   # 只有真在排队才写；不在等的卡留空
+    v["runs"] = [{k: r.get(k) for k in stall.RUN_VIEW_KEYS} for r in store.runs_for_task(t["id"])]
     v["tokens"] = store.tokens_for_task(t["id"])
     v["report"] = tasks.read_report(t["id"])
     try:

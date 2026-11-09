@@ -11,7 +11,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 import threading
 import time
@@ -92,7 +91,7 @@ def _ask_pi(rt: dict, timeout_s: float) -> list[dict] | None:
             script.unlink()
         except OSError:
             pass
-        shutil.rmtree(work / "pi-catalog-home", ignore_errors=True)
+        tmpdir.rmtree_safe(work / "pi-catalog-home", ignore_errors=True)
     if not isinstance(doc, list):
         return None
     return [m for m in doc if isinstance(m, dict) and m.get("api") in _APIS and m.get("id") and m.get("baseUrl")]

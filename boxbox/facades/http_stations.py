@@ -5,7 +5,7 @@ import pathlib
 import re
 import subprocess
 
-from .. import config, connectors, i18n, pi_config, providers, quota, tasks
+from .. import config, connectors, i18n, pi_config, providers, quota, stall, tasks
 from ..store import now_iso, today_key
 from .http_const import COPY_TAIL_RE, DISPATCH_EVENT_KINDS, STATION_ROLES, STATION_RUNNERS
 from .http_core import normalize_role
@@ -179,15 +179,6 @@ def _station_detail(d, sid: str) -> tuple[dict, int]:
                 provider = str(p.get("name") or p.get("id"))
                 break
         provider = provider or str(pi["provider_id"])
-    quota_peers = []            # 同一服务商（同 key）的其它工位：额度是共用的一份
-    my_provider = providers.station_provider(st) if st.get("client") == "pi" else None
-    if my_provider:
-        my_key = config.get_secret(sid) or ""
-        for s2 in config.stations():
-            if s2.get("id") == sid or s2.get("client") != "pi":
-                continue
-            if providers.station_provider(s2) == my_provider and (config.get_secret(str(s2.get("id") or "")) or "") == my_key:
-                quota_peers.append(str(s2.get("id")))
     detail = {
         "ok": True,
         "station": st,                                                  # stations.json 里本来就没有 key（key 在 secrets.json）
@@ -198,8 +189,9 @@ def _station_detail(d, sid: str) -> tuple[dict, int]:
                   "rate": round(done / (done + failed), 3) if (done + failed) else None},
         "events": [{"id": e.get("id"), "ts": e.get("ts"), "kind": e.get("kind"),
                     "text": e.get("text"), "task_id": e.get("task_id")} for e in evs],
-        "quota": quota.localize(store.kv_get("quota:" + sid)),
-        "quota_peers": quota_peers,
+        "activity": stall.activity_view(next((r for r in store.open_runs() if r.get("station") == sid), None)),
+        "quota": quota.localize(quota.read(store, st)),
+        "quota_peers": quota.peers(st),
         "now": now_iso(),
     }
     return detail, 200

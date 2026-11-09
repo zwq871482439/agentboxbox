@@ -22,13 +22,26 @@ import subprocess
 import sys
 import threading
 
-from .. import classify, config, i18n, pi_catalog, pi_config, pi_events, procjob, tasks, tmpdir
+from .. import classify, config, i18n, pi_catalog, pi_config, pi_events, procjob, runlog, stall, tasks, tmpdir
 from .base import Heartbeat, RunHandle, Runner, RunResult
 
 IS_WIN = sys.platform.startswith("win")
 MAX_STDERR_LINES = 200
 LOG_MARK = "# ---- pi --mode json ----"   # 运行日志里这一轮事件流的起点（补记用量时靠它认哪一轮）
 _NODE_NOISE = re.compile(r"^\s*(\(node:\d+\)\s*)?\[?\w*Warning\b", re.I)
+# 打工猫的进程不是交互终端。这些口子一开，git / gh 就会等编辑器、分页器或密码，一直不回来。
+# 用户自己设了也盖掉：true / cat 马上返回，提交说明沿用 git 已经写好的那份。
+QUIET_ENV = {
+    "GIT_EDITOR": "true",
+    "GIT_SEQUENCE_EDITOR": "true",
+    "GIT_MERGE_AUTOEDIT": "no",
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_PAGER": "cat",
+    "PAGER": "cat",
+    "EDITOR": "true",
+    "VISUAL": "true",
+    "GH_PROMPT_DISABLED": "1",
+}
 
 
 def _now() -> str:
@@ -58,8 +71,10 @@ class _Live:
         self.stderr: list[str] = []
         self.last_event_at: str | None = None
         self.first_event_at: str | None = None
+        self.progress: dict = {}
         self.lock = threading.Lock()
         self.threads: list[threading.Thread] = []
+        self.slim = runlog.Slimmer()          # 记录只记有用的：逐字片段和长命令的重复输出不进文件
 
     def _pump_stdout(self):
         f = self.proc.stdout
@@ -72,7 +87,10 @@ class _Live:
                         ts = _now()
                         self.last_event_at = ts
                         self.first_event_at = self.first_event_at or ts
-                self._log(line)
+                        self.progress = stall.feed(self.progress, ev, ts)
+                kept = self.slim.line(line)       # 解析和卡住判断用的是整行；只是写进文件的少了
+                if kept is not None:
+                    self._log(kept)
         except (OSError, ValueError):
             pass
 
@@ -192,6 +210,7 @@ class PiOnceRunner(Runner):
                    BOXBOX_ROUND=str(card.get("round") or 1),                    # 卡上的轮次，拿不到写 1
                    TMP=str(tmp_dir), TEMP=str(tmp_dir), TMPDIR=str(tmp_dir),     # 临时文件别进系统临时目录
                    BOXBOX_TMP_DIR=str(tmp_dir))
+        env.update(QUIET_ENV)                                 # 放在后面：盖住用户环境里的编辑器 / 分页器 / 密码提示
         gb = _git_bash_dir()
         if gb:
             env["PATH"] = gb + os.pathsep + env.get("PATH", "")
@@ -249,8 +268,10 @@ class PiOnceRunner(Runner):
         alive = live.proc.poll() is None
         with live.lock:
             run = live.parser.run
+            progress = dict(live.progress) if live.progress else None
             hb = Heartbeat(alive=alive, finished=not alive, last_activity=live.last_event_at,
-                           evidence="event" if live.last_event_at else "pid", n_tools=run.tool_calls)
+                           evidence="event" if live.last_event_at else "pid", n_tools=run.tool_calls,
+                           progress=progress)
         return hb
 
     def finish(self, handle: RunHandle) -> RunResult:
@@ -308,12 +329,37 @@ class PiOnceRunner(Runner):
             # 接口报错断在半路的也留着：猫歇完回来要接着这段对话往下做
             keep = bool((handle.extra or {}).get("keep_session")) or (bool(iface_err) and run.tool_calls > 0)
             if not keep:
-                shutil.rmtree(handle.extra.get("session_dir") or "", ignore_errors=True)  # one card = one throwaway session
+                tmpdir.rmtree_safe(handle.extra.get("session_dir") or "", ignore_errors=True)  # one card = one throwaway session
         except OSError:
             pass
+        # 最后几行要带给收尾：live 马上丢掉，日志里那份是打过码的，这里留原文
+        stderr_tail = "\n".join([ln for ln in stderr_txt.splitlines() if ln.strip()][-5:])
         return RunResult(exit=exit_code, status=status, tokens=tokens, error=error,
                          suspect_why=summ.get("suspect_why") or "", session_id=run.session_id,
-                         n_tools=int(summ.get("tools") or 0), iface_error=(iface_err[:200] if iface_err else ""))
+                         n_tools=int(summ.get("tools") or 0), iface_error=(iface_err[:200] if iface_err else ""),
+                         stderr=stderr_tail, split=summ.get("split"))
+
+    def stop(self, run_id: str) -> bool:
+        """停掉这一次运行的整棵进程树。记录先留着，finish / discard 再收。"""
+        live = self.live.get(run_id)
+        if live is None:
+            return False
+        if live.proc is not None:
+            procjob.kill_tree(live.proc)
+            return live.proc.poll() is not None
+        return procjob.kill_pid(live.pid)
+
+    def discard(self, run_id: str) -> None:
+        """进程已经停了：丢掉记录、关上管道。不删对话目录（撤卡不走 finish）。"""
+        live = self.live.pop(run_id, None)
+        if live is None or live.proc is None:
+            return
+        for f in (live.proc.stdout, live.proc.stderr):
+            try:
+                if f:
+                    f.close()
+            except OSError:
+                pass
 
     def stop_all(self) -> list[str]:
         """核心退出：结束这个工位所有在跑的 Pi 进程（连子进程），返回被中断的 run_id。

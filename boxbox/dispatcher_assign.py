@@ -8,7 +8,19 @@ import time
 
 from . import config, exchange, gates, i18n, pi_config, scenes, tasks, tmpdir
 from . import feedback as _feedback
-from .dispatcher_const import CONFLICT_STATES, IFACE_WHY, RESUME_AT, RESUME_SESSION, WAIT_BUSY, WAIT_LEGACY, WAIT_NETWORK, WAIT_REASON_KEY, WAIT_REST
+from .dispatcher_const import (
+    CONFLICT_STATES,
+    IFACE_WHY,
+    QUEUE_FRONT,
+    RESUME_AT,
+    RESUME_SESSION,
+    WAIT_BUSY,
+    WAIT_CONFIG,
+    WAIT_LEGACY,
+    WAIT_NETWORK,
+    WAIT_REASON_KEY,
+    WAIT_REST,
+)
 from .dispatcher_util import _default_workdir, _git_head, _prepare_resume, _st_lang
 from .runners import RunResult
 from .store import now_iso
@@ -69,7 +81,7 @@ class AssignMixin:
                 "card_json": json.dumps(card, ensure_ascii=False), "card_path": str(path)})
             self.store.event("assign", i18n.t("ev.assign", lg, by=by, sid=station_id, title=card["title"]), station_id, task_id)
             scenes.note_assign(self.store, task_id, station_id, card.get("goal"))   # 同一个 goal 10 分钟内 ≥ 2 张 → 站会
-            # 改同一批文件的提醒（不拦）：和还开着的卡比工作目录 / files 重叠
+            # 撞车提醒（不拦）：两边都写了 files 才比路径；没写的、或同一个仓库里都要提交，另外说一声
             warnings = self._conflict_warnings(task_id, card)
             # 这只猫在歇着（额度用完 / 被限流 / 接口连不上 / 服务端出错）：卡排队等它回来
             if not self._rest_ok_to_start(st):
@@ -141,7 +153,22 @@ class AssignMixin:
         back_at = (_dt.datetime.now().astimezone() + _dt.timedelta(seconds=interval)).isoformat(timespec="seconds")
         self.mark_resting(st["id"], "network", back_at=back_at, hint="", why=i18n.t("rest.reason.network", lg))
         return self._ack("queued", text, task_id=task_id, queued=True)
-    def _launch(self, st: dict, runner, task_id: str, card: dict, attempt: int, prompt: str | None = None) -> dict:
+    def _hold_for_config(self, st: dict, task_id: str, card: dict) -> dict:
+        """配置有问题就先别开工：再开一次还是同样的报错。卡先排队，等配置保存了再开。"""
+        entry = self.config_of(st["id"]) or {}
+        lg = self.lang()
+        why = entry.get("why") or i18n.t("ack.config_no_why", lg)
+        text = i18n.t("ack.config_hold", lg, sid=st["id"], why=why)
+        card = dict(card)
+        card[WAIT_REASON_KEY] = WAIT_CONFIG
+        tasks.write_card(task_id, card)
+        self.store.update_task(task_id, state="queued", card_json=json.dumps(card, ensure_ascii=False))
+        self.store.event("queued", text, st["id"], task_id)
+        return self._ack("queued", text, task_id=task_id, state="queued", queued=True)
+    def _launch(self, st: dict, runner, task_id: str, card: dict, attempt: int, prompt: str | None = None,
+                take_notes: bool = True) -> dict:
+        if self.config_of(st["id"]):
+            return self._hold_for_config(st, task_id, card)
         if st.get("client") == "pi":
             wait = self._network_wait(st, task_id)     # 接口连不上：不启动，排队等接口
             if wait is not None:
@@ -155,6 +182,10 @@ class AssignMixin:
         d = tasks.card_dir(task_id)
         report_path = d / "report.md"
         prompt = prompt if prompt is not None else self._member_prompt(st, task_id, card)
+        pending: list = []
+        if take_notes and self._notes_pi(st):
+            # 闲着时的留言等到这张卡真开工再拼上；排队、接口还没通的时候不标已读
+            prompt, pending = self._splice_pending_notes(st, prompt)
         (d / "prompt.txt").write_text(prompt, encoding="utf-8")
         log_path = d / ("run-%d.log" % attempt)
         base = _git_head(card.get("cwd"))
@@ -166,6 +197,8 @@ class AssignMixin:
             self.store.update_task(task_id, state="failed", returned_reason=text)   # 拦下的原因写进卡
             self.store.event("unreachable", i18n.t("ev.unreachable", lg, sid=st["id"], why=e), st["id"], task_id)
             return self._ack("unreachable", text, task_id=task_id)
+        if pending:
+            self.store.mark_messages_read([n["id"] for n in pending])   # 进程起来了才算猫看到
         self.handles[run_id] = handle
         self.run_owners[run_id] = runner      # 记住是哪个运行器起的，配置改了也找得到进程
         scheduled = runner.mode == "scheduled"
@@ -215,41 +248,99 @@ class AssignMixin:
     def _norm_cwd(cwd) -> str:
         return os.path.normcase(os.path.normpath(os.path.abspath(str(cwd or "").strip())))
     @staticmethod
-    def _norm_file(f) -> str:
-        """卡上 files 的一条：/ 和 \\ 都认，去掉开头的 ./ 和 /，结尾的 /，大小写不分（Windows）。"""
-        s = str(f or "").strip().replace("\\", "/").lower()
+    def _raw_files(card) -> list[str]:
+        files = (card or {}).get("files") or []
+        return [str(x).strip() for x in files if isinstance(x, str) and str(x).strip()]
+    @staticmethod
+    def _abs_file(cwd, rel: str) -> str:
+        """相对这张卡自己的 cwd 解成绝对路径：两张卡 cwd 不同，也可能指向同一个文件。
+        / 和 \\ 当一样；Windows 上 normcase 不分大小写。"""
+        s = str(rel or "").strip().replace("\\", "/")
         while s.startswith("./"):
             s = s[2:]
-        return s.strip("/")
+        native = s.replace("/", os.sep)
+        if not os.path.isabs(native):
+            native = os.path.join(str(cwd or ""), native)
+        return os.path.normcase(os.path.normpath(os.path.abspath(native)))
     @staticmethod
-    def _files_overlap(a: str, b: str) -> bool:
-        """同一个文件，或一个是另一个的上级目录。"""
-        return a == b or a.startswith(b + "/") or b.startswith(a + "/")
+    def _show_file(rel: str) -> str:
+        """提醒里写回首领看的那条路径：斜杠统一，去掉 ./ 和结尾的 /。"""
+        s = str(rel or "").strip().replace("\\", "/")
+        while s.startswith("./"):
+            s = s[2:]
+        if s not in ("", "/"):
+            s = s.rstrip("/")
+        return s
+    @staticmethod
+    def _paths_overlap(a: str, b: str) -> bool:
+        """同一个路径，或一个是另一个的上级目录（pr103 含 pr103/a.txt，pr103-报告 不算）。"""
+        aa = a.replace("\\", "/")
+        bb = b.replace("\\", "/")
+        return aa == bb or aa.startswith(bb + "/") or bb.startswith(aa + "/")
+    @staticmethod
+    def _wants_commit(card) -> bool:
+        gates = ((card or {}).get("acceptance") or {}).get("gates") or []
+        if not isinstance(gates, list):
+            return False
+        return any(isinstance(g, dict) and str(g.get("check") or "") == "commits" for g in gates)
+    @staticmethod
+    def _git_workdir(cwd) -> bool:
+        """这个 cwd 本身是不是仓库（含 worktree 的 .git 文件）。子目录不算：并行提交的风险在同一个工作树。"""
+        return os.path.exists(os.path.join(str(cwd or ""), ".git"))
+    def _file_hits(self, new_raw, new_abs, old_raw, old_cwd) -> list[str]:
+        """两边都写了 files 时，撞上的路径（按首领写的样子，去重）。"""
+        old_abs = [self._abs_file(old_cwd, f) for f in old_raw]
+        hits: list[str] = []
+        seen: set[str] = set()
+        for nf, na in zip(new_raw, new_abs, strict=True):
+            for of, oa in zip(old_raw, old_abs, strict=True):
+                if not self._paths_overlap(na, oa):
+                    continue
+                for label in (nf, of):
+                    show = self._show_file(label)
+                    key = os.path.normcase(show)
+                    if show and key not in seen:
+                        seen.add(key)
+                        hits.append(show)
+        return hits
     def _conflict_warnings(self, new_task_id: str, card: dict) -> list[str]:
-        """新卡和所有还开着的卡比：① cwd 相同（不同猫用同一个目录）；② files 重叠（同文件 / 上下级目录）。
-        有重叠不拦，只回一串人话提醒。没写 files 的卡只比 ①。"""
+        """和还开着的卡比 files：有交集才提醒，并写出撞上的路径。
+        cwd 一样但有一边没写 files：提醒补上，否则查不了撞没撞。
+        同一个 git 工作目录里两张都要提交：另外提醒。不拦派卡。"""
         lg = self.lang()
         new_cwd = self._norm_cwd(card.get("cwd"))
-        new_files = [self._norm_file(x) for x in (card.get("files") or []) if isinstance(x, str) and x.strip()]
+        new_raw = self._raw_files(card)
+        new_abs = [self._abs_file(card.get("cwd"), f) for f in new_raw]
         warns: list[str] = []
+        noted_this = False
         for t in self.store.list_tasks(state=CONFLICT_STATES):
             if t["id"] == new_task_id:
                 continue
             oc = t.get("card") or {}
             doing = "%s (%s %s)" % (t["id"], t["assignee"], i18n.t("ev.doing." + t["state"], lg))
-            if new_cwd and self._norm_cwd(oc.get("cwd")) == new_cwd:
-                w = i18n.t("ev.warn_same_cwd", lg, doing=doing, cwd=card.get("cwd") or "")
+            old_raw = self._raw_files(oc)
+            old_cwd = oc.get("cwd") or ""
+            same_cwd = bool(new_cwd) and self._norm_cwd(old_cwd) == new_cwd
+            if new_raw and old_raw:
+                hits = self._file_hits(new_raw, new_abs, old_raw, old_cwd)
+                if hits:
+                    joined = i18n.t("gate.list_sep", lg).join(hits)
+                    w = i18n.t("ev.warn_same_files", lg, doing=doing, files=joined)
+                    if w not in warns:
+                        warns.append(w)
+            elif same_cwd:
+                # 有一边没写 files 就比不了路径；这张卡只说一次，对面每张说自己
+                if not new_raw and not noted_this:
+                    warns.append(i18n.t("ev.warn_files_missing", lg, who=i18n.t("ev.warn_files_this", lg)))
+                    noted_this = True
+                if not old_raw:
+                    w = i18n.t("ev.warn_files_missing", lg, who=doing)
+                    if w not in warns:
+                        warns.append(w)
+            if same_cwd and self._wants_commit(card) and self._wants_commit(oc) and self._git_workdir(card.get("cwd")):
+                w = i18n.t("ev.warn_same_commits", lg, doing=doing, cwd=card.get("cwd") or "")
                 if w not in warns:
                     warns.append(w)
-            old_files = [self._norm_file(x) for x in (oc.get("files") or []) if isinstance(x, str) and x.strip()]
-            if not new_files or not old_files:
-                continue
-            for nf in new_files:
-                for of in old_files:
-                    if self._files_overlap(nf, of):
-                        w = i18n.t("ev.warn_same_files", lg, doing=doing, files=nf or of)
-                        if w not in warns:
-                            warns.append(w)
         return warns
     def _busy_wait(self, station_id: str, exclude: str | None = None) -> bool:
         """这只猫手上是不是已经有一张在跑的卡（dispatched / running）？（一只猫同一时间只跑一张卡）
@@ -262,12 +353,14 @@ class AssignMixin:
         return False
     def start_ready_queued(self) -> int:
         """排队卡自动开工：等这只猫腾出手的（wait_reason=busy）、等猫歇完回来的（wait_reason=rest），
-        还有老版本留下的排队原因——都当普通排队卡处理，猫闲着就开工。按先来后到。返回开了几张。"""
+        还有老版本留下的排队原因——都当普通排队卡处理，猫闲着就开工。
+        打回过的卡排在新卡前面，其余按卡号先来后到。返回开了几张。"""
         started = []
         with self.lock:
             waiting = sorted((t for t in self.store.list_tasks(state="queued")
-                              if (t.get("card") or {}).get(WAIT_REASON_KEY) in (WAIT_BUSY, WAIT_REST, WAIT_LEGACY)),
-                             key=lambda t: t["id"])
+                              if (t.get("card") or {}).get(WAIT_REASON_KEY) in
+                              (WAIT_BUSY, WAIT_REST, WAIT_LEGACY, WAIT_CONFIG)),
+                             key=lambda t: (0 if (t.get("card") or {}).get(QUEUE_FRONT) else 1, t["id"]))
             if not waiting:
                 return 0
             busy: set[str] = set()
@@ -284,22 +377,34 @@ class AssignMixin:
                     continue
                 if self.rest_of(t["assignee"]):   # 这只猫还在歇着：等它回来再说
                     continue
+                if self.config_of(t["assignee"]):  # 配置还没改：再开还是同样的报错
+                    continue
                 card = dict(t["card"])
                 card.pop(WAIT_REASON_KEY, None)
+                card.pop(QUEUE_FRONT, None)          # 插队标记用过即弃，别跟着卡进下一轮
                 card, _can = _prepare_resume(card)   # 对话记录没了就别接着聊，从头开始
                 tasks.write_card(t["id"], card)
                 self.store.update_task(t["id"], state="dispatched", round=int(t["round"] or 1),
                                        card_json=json.dumps(card, ensure_ascii=False))
                 busy.add(t["assignee"])
                 wait = (t.get("card") or {}).get(WAIT_REASON_KEY)
-                started.append((st, runner, t, card,
-                                "busy" if wait == WAIT_BUSY else ("rest" if wait == WAIT_REST else "idle")))
+                if wait == WAIT_CONFIG:
+                    kind = "config"
+                elif wait == WAIT_BUSY:
+                    kind = "busy"
+                elif wait == WAIT_REST:
+                    kind = "rest"
+                else:
+                    kind = "idle"
+                started.append((st, runner, t, card, kind))
         lg = self.lang()
         for st, runner, t, card, kind in started:
             if kind == "busy":
                 why = i18n.t("ev.start_why.busy", lg, sid=st["id"])
             elif kind == "rest":
                 why = i18n.t("ev.start_why.back", lg, sid=st["id"])   # 歇着的猫到点回来，接着干排队的卡
+            elif kind == "config":
+                why = i18n.t("ev.start_why.config", lg, sid=st["id"])
             else:
                 why = i18n.t("ev.start_why.free", lg, sid=st["id"])
             self.store.event("start", i18n.t("ev.start", lg, sid=st["id"], title=card.get("title") or t["id"], why=why),
@@ -329,6 +434,8 @@ class AssignMixin:
                 stations.setdefault(t["assignee"], []).append(t)
             due = []
             for sid in sorted(stations):
+                if self.config_of(sid):          # 配置错了：探通接口也开不了工
+                    continue
                 if not force and now < self._net_retry_at.get(sid, 0):
                     continue
                 st = self.station(sid)
@@ -340,7 +447,9 @@ class AssignMixin:
                 else:
                     self._net_retry_at[sid] = now + interval   # 还不通：下一轮再探（同步存，重启不丢）
                     # 还是连不上：猫继续歇着（状态词不变）
-                    self.mark_resting(sid, "network", back_at=(now + interval).isoformat(timespec="seconds"),
+                    # now 是 time.time() 的秒数：先换成带时区的时间再写（之前直接 .isoformat，断网时看门狗每拍报错）
+                    back = _dt.datetime.fromtimestamp(now + interval).astimezone().isoformat(timespec="seconds")
+                    self.mark_resting(sid, "network", back_at=back,
                                       hint="", why=i18n.t("rest.reason.network", self.lang()))
             if not due:
                 return 0
@@ -354,6 +463,7 @@ class AssignMixin:
                     continue
                 card = dict(t["card"])
                 card.pop(WAIT_REASON_KEY, None)
+                card.pop(QUEUE_FRONT, None)          # 插队标记用过即弃，别跟着卡进下一轮
                 card, _can = _prepare_resume(card)   # 对话记录没了就别接着聊，从头开始
                 tasks.write_card(t["id"], card)
                 self.store.update_task(t["id"], state="dispatched", round=int(t["round"] or 1),

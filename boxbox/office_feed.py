@@ -27,7 +27,7 @@ SKIN_CATS = [2, 3, 4, 5, 6]  # leader 1，其余按出现顺序循环
 TODO_KINDS = ["blocked", "reviewing", "returned", "interrupted", "unstarted", "failed", "queued"]
 # 看板这些词本身就是状态词，画布直接用；别的（比如首领的「在岗」）换成规范里的词
 KNOWN_WORD_CODES = {"running", "running_queue", "idle", "off", "off_queue", "wait_sched",
-                     "on_duty_sched", "sched_late", "not_connected", "rest"}
+                     "on_duty_sched", "sched_late", "not_connected", "rest", "stuck", "config"}
 # 老数据只有中文 kind 时按它反查代码
 LEGACY_KIND_CODES = {
     "待验收": "reviewing", "卡住": "blocked", "打回待定": "returned", "中断": "interrupted",
@@ -234,7 +234,9 @@ def _state_of(row: dict, lvl1: dict, lvl2: dict) -> str:
         return "off"
     if row.get("role") == "leader":
         return "arch"
-    if str(row.get("word_code") or "") in ("running", "running_queue"):
+    if str(row.get("word_code") or "") == "config":
+        return "config"          # 配置有问题：状态词用看板那句，不当成闲着
+    if str(row.get("word_code") or "") in ("running", "running_queue", "stuck"):
         return "run"
     if row.get("rest"):        # 歇着：出去玩了，等的样子，不是出错
         return "rest"
@@ -380,7 +382,7 @@ def build(meta: dict, board: list[dict], todo: dict, tokens: dict, stations_def:
             "state": state,
             "state_word": state_word,
             "state_sub": str(row.get("client") or ""),
-            # 余量血条：数据从查余量的结果来（core 里 kv 的 quota:<工位>），没查到就 off，画布不画
+            # 余量血条：调用方按额度账户填好的同一份结果，没查到就 off，画布不画
             **_quota_fields(mode_by_station.get(sid, "off"), quotas.get(sid), now, lg),
             "task_d": str(row.get("title") or ""),
             "tool": "",               # v2 暂无「最后用的工具」

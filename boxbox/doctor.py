@@ -69,7 +69,7 @@ def check_data_dir(data_dir: Path | None = None, lang: str | None = None) -> Che
 
 
 def check_leader(stations: list[dict] | None = None, lang: str | None = None) -> Check:
-    """有且只有一个启用的首领工位。"""
+    """至少有一个启用的首领。多个首领各看自己派的卡，自检也算通过。"""
     sts = stations if stations is not None else config.stations()
     label = i18n.t("doctor.label.leader", lang)
     leaders = [str(s.get("id")) for s in sts
@@ -79,8 +79,8 @@ def check_leader(stations: list[dict] | None = None, lang: str | None = None) ->
     if not leaders:
         return Check("leader", label, False, i18n.t("doctor.leader.none", lang),
                      i18n.t("doctor.leader.none.fix", lang))
-    return Check("leader", label, False, i18n.t("doctor.leader.many", lang, n=len(leaders), names=i18n.t("list.sep", lang).join(leaders)),
-                 i18n.t("doctor.leader.many.fix", lang))
+    names = i18n.t("list.sep", lang).join(leaders)
+    return Check("leader", label, True, i18n.t("doctor.leader.many", lang, n=len(leaders), names=names), "")
 
 
 def check_core(core_url: str | None, timeout_s: float = 2.0, lang: str | None = None) -> Check:

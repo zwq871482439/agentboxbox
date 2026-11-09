@@ -82,8 +82,14 @@ details.form[open]>summary{margin-bottom:10px}
 .prm .u{font-size:12px;color:var(--dim);margin-left:6px}
 .prm input[type=checkbox]{width:auto;justify-self:end;margin:0;accent-color:var(--green)}
 .prm .times{grid-column:2 / span 3;display:flex;flex-wrap:wrap;gap:6px 18px}
+/* 一行里的按钮组（语言、服务商清单、临时文件、数据目录、从旧版导入）：放到说明下面一整行，别挤进最右那 36px 的格子里一字一行 */
+.prm .ctl{grid-column:2 / -1;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.prm .ctl .btn{white-space:nowrap}
+#import-path{flex:1 1 220px;width:auto;max-width:420px;text-align:left}
 .prm .times label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim)}
 .prm .times input{width:auto;margin:0}
+details.adv>summary{cursor:pointer;font-weight:600;font-size:16px}
+details.adv .hint{margin:4px 0 8px}
 #doctor .chk{display:grid;grid-template-columns:52px 220px 1fr;gap:4px 12px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px}
 #doctor .mk{font-size:12px;font-weight:600}#doctor .mk.ok{color:#3ddc84}#doctor .mk.fail{color:#ff6b6b}#doctor .mk.skip{color:var(--dim)}
 #doctor .dt{color:var(--dim);word-break:break-all}#doctor .fx{grid-column:2 / span 2;color:#f5b301;font-size:12.5px}
@@ -146,7 +152,7 @@ details.form[open]>summary{margin-bottom:10px}
     <div class="hd"><h1 data-i18n="st.params">盒子参数</h1><span class="sp"></span></div>
     <div class="prm"><span class="lb" data-i18n="st.lang">语言</span>
       <span class="ds" data-i18n="st.langDesc">界面、上岗话和办公室用哪种语言。选了就一直按这个来。</span>
-      <span style="display:flex;gap:8px;align-items:center;justify-content:flex-end">
+      <span class="ctl">
         <button type="button" class="btn" id="lang-zh" data-i18n="st.langZh">中文</button>
         <button type="button" class="btn" id="lang-en" data-i18n="st.langEn">English</button></span></div>
     <div class="prm"><span class="lb" data-i18n="st.wakeMin">多久提醒你去叫首领</span>
@@ -178,10 +184,38 @@ details.form[open]>summary{margin-bottom:10px}
         <label><span data-i18n="st.night">夜晚</span><input id="t-night" type="time" value="18:30"></label></span></div>
     <div class="prm"><span class="lb" data-i18n="st.providers">服务商清单</span>
       <span class="ds" data-i18n="st.providersDesc">登记 Pi 工位时从这里选服务商和模型，再按公开单价估算花费。清单来自 models.dev（MIT）。「更新」要从网上下载最新的一份。</span>
-      <span style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
-        <span class="ds" id="prov-status" data-i18n="st.reading">正在读…</span><button class="btn" id="btn-prov" data-i18n="st.update">更新</button></span></div>
+      <span class="ctl">
+        <button class="btn" id="btn-prov" data-i18n="st.update">更新</button><span class="ds" id="prov-status" data-i18n="st.reading">正在读…</span></span></div>
     <div class="foot"><span data-i18n="st.foot">这里只放常用参数；端口、留存天数在 data/settings.json 里改。工位在「工位」页里加和改。</span>
       <span data-i18n="st.version">当前版本</span> <b id="bx-app-version">–</b></div>
+    <details class="adv">
+      <summary data-i18n="st.advanced">高级</summary>
+      <p class="hint" data-i18n="st.advancedDesc">卡住提醒和单条命令的时长。默认就够用。</p>
+      <div class="prm"><span class="lb" data-i18n="st.stallCmd">命令多久没新输出就提醒</span>
+        <span class="ds" data-i18n="st.stallCmdDesc">命令还在跑、但这么多分钟没有新输出，待办里标「可能卡住」。不看命令写的是什么。</span>
+        <input id="s-stall_cmd_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
+      <div class="prm"><span class="lb" data-i18n="st.stallModel">模型多久没回话就提醒</span>
+        <span class="ds" data-i18n="st.stallModelDesc">这么多分钟没有任何新的模型输出，待办里标「可能卡住」。</span>
+        <input id="s-stall_model_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
+      <div class="prm"><span class="lb" data-i18n="st.stallNotool">多久不调用工具就提醒</span>
+        <span class="ds" data-i18n="st.stallNotoolDesc">模型还在输出，但这么多分钟没有调用工具，待办里标「可能卡住」。只提醒，不停下。</span>
+        <input id="s-stall_notool_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
+      <div class="prm"><span class="lb" data-i18n="st.cmdHard">一条命令最长跑多久</span>
+        <span class="ds" data-i18n="st.cmdHardDesc">到了就停下这次，卡记失败，写上是哪条命令超时。对话还留着，可以再派接着做。</span>
+        <input id="s-cmd_hard_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
+      <div class="prm"><span class="lb" data-i18n="st.logFull">完整运行记录</span>
+        <span class="ds" data-i18n="st.logFullDesc">原样记下模型逐字的输出和长命令每次的全部输出。只在排查问题时打开，很占地方。</span>
+        <input id="s-log_full" type="checkbox"></div>
+      <div class="prm"><span class="lb" data-i18n="st.logTail">长命令的输出记多少</span>
+        <span class="ds" data-i18n="st.logTailDesc">命令还在跑时，每 30 秒记一次，只留最后这么多字。0 = 只记命令跑完的结果。</span>
+        <input id="s-log_tool_tail_chars" type="number" min="0"><span class="u" data-i18n="st.chars">字</span></div>
+      <div class="prm"><span class="lb" data-i18n="st.logGzip">结束的卡几天后压缩记录</span>
+        <span class="ds" data-i18n="st.logGzipDesc">完成、撤掉、失败的卡，运行记录过这么多天压成 .gz，大约只剩二十分之一。0 = 下一次整理就压（每小时一次）。</span>
+        <input id="s-log_gzip_days" type="number" min="0"><span class="u" data-i18n="st.days">天</span></div>
+      <div class="prm"><span class="lb" data-i18n="st.logKeep">结束的卡记录留多久</span>
+        <span class="ds" data-i18n="st.logKeepDesc">过了就删掉运行记录，卡片和回报留着。0 = 一直留。</span>
+        <input id="s-log_keep_days" type="number" min="0"><span class="u" data-i18n="st.days">天</span></div>
+    </details>
   </div>
 
   <div class="panel" id="doctor">
@@ -200,9 +234,18 @@ details.form[open]>summary{margin-bottom:10px}
     <div id="privacyBox" class="privacy"><div class="empty" data-i18n="st.readingPrivacy">正在读隐私声明…</div></div>
     <div class="prm"><span class="lb" data-i18n="st.tmp">临时文件</span>
       <span class="ds" data-i18n="st.tmpDesc">过程垃圾（存请求正文的 JSON、试跑脚本、中间文件）都在程序目录的 tmp\ 里，每张卡一个子目录。
-        默认留 1 天（设置项 tmp_keep_days），没有卡在跑的时候整个 tmp\ 随时能删，data\ 不动。</span>
-      <span id="tmp-size">–</span><button class="btn" id="btn-tmpclean" data-i18n="st.cleanTmp">清理临时文件</button>
-      <span class="hint" id="tmp-msg"></span></div>
+        完成或撤掉的卡马上清；失败或中断的留着方便查，默认留 1 天（设置项 tmp_keep_days）。data\ 不动。</span>
+      <span class="ctl"><span id="tmp-size">–</span><button class="btn" id="btn-tmpclean" data-i18n="st.cleanTmp">清理临时文件</button>
+      <span class="hint" id="tmp-msg"></span></span></div>
+    <div class="prm"><span class="lb" data-i18n="st.dataUse">数据目录</span>
+      <span class="ds" data-i18n="st.dataUseDesc">data\ 里是盒子的记录：卡、工位、设置，和每次运行的记录（占地方的主要是它）。结束的卡的运行记录按「高级」里的天数自动压缩、删除。</span>
+      <span class="ctl"><span id="data-size">–</span><button class="btn" id="btn-dataclean" data-i18n="st.cleanData">现在压缩结束的卡的记录</button>
+      <span class="hint" id="data-msg"></span></span></div>
+    <div class="prm"><span class="lb" data-i18n="st.importOld">从旧版导入</span>
+      <span class="ds" data-i18n="st.importOldDesc">先从托盘退出旧版。会换成旧版的猫、设置和卡。</span>
+      <span class="ctl"><input id="import-path" type="text" data-i18n-placeholder="st.importOldPh" placeholder="旧版文件夹，或它的 data 文件夹">
+      <button type="button" class="btn" id="btn-import-old" data-i18n="st.importOldBtn">导入</button>
+      <span class="hint" id="import-msg"></span></span></div>
   </div>
 
 
@@ -222,6 +265,15 @@ details.form[open]>summary{margin-bottom:10px}
     </div>
   </div>
 
+  <div class="dlg" id="importDlg" hidden>
+    <div class="box">
+      <h3 data-i18n="st.importOld">从旧版导入</h3>
+      <p id="importDlgText"></p>
+      <div class="btns"><button type="button" class="btn" id="importDlgNo" data-i18n="st.cancel">取消</button>
+        <button type="button" class="btn pri" id="importDlgYes" data-i18n="st.importOldBtn">导入</button></div>
+    </div>
+  </div>
+
   <div class="dlg" id="provDlg" hidden>
     <div class="box">
       <h3 data-i18n="st.provDlgTitle">要联网才能更新</h3>
@@ -237,7 +289,9 @@ details.form[open]>summary{margin-bottom:10px}
 (function () {
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
   var PRMS = ["wake_min", "ack_timeout_s", "heartbeat_s", "member_feedback_max_chars"];
+  var ADV = ["stall_cmd_s", "stall_model_s", "stall_notool_s", "cmd_hard_s"];
   var BOOLS = ["scene_bubbles", "member_feedback", "tray_notify"];   /* 勾选项：存真假，不是数字 */
+  var LOG_INTS = ["log_tool_tail_chars", "log_gzip_days", "log_keep_days"];   /* 运行记录：原样存的数，可以是 0 */
 
   function $(s) { return document.querySelector(s); }
   function esc(s) {
@@ -253,10 +307,16 @@ details.form[open]>summary{margin-bottom:10px}
   /* ---------- 核心参数 ---------- */
   var TIMES = ["dawn", "day", "dusk", "night"];
   function fillTimes(t) { t = t || {}; TIMES.forEach(function (k) { if (t[k]) { $("#t-" + k).value = t[k]; } }); }
+  function fillLogs(s) {
+    LOG_INTS.forEach(function (k) { $("#s-" + k).value = s[k] == null ? "" : s[k]; });
+    $("#s-log_full").checked = s.log_full === true;            /* 默认关：没写就是关 */
+  }
   function loadSettings() {
     return api("/api/settings", { cache: "no-store" }).then(function (s) {
       PRMS.forEach(function (k) { $("#s-" + k).value = s[k] == null ? "" : s[k]; });
+      ADV.forEach(function (k) { $("#s-" + k).value = Math.max(1, Math.round((Number(s[k]) || 0) / 60)); });
       BOOLS.forEach(function (k) { $("#s-" + k).checked = s[k] !== false; });
+      fillLogs(s);
       fillTimes(s.office_theme_times);
     }).catch(function () { $("#set-msg").textContent = T("st.unreachable"); });
   }
@@ -265,7 +325,10 @@ details.form[open]>summary{margin-bottom:10px}
   $("#btn-setsave").onclick = function () {
     var body = {};
     PRMS.forEach(function (k) { body[k] = Math.max(1, num($("#s-" + k).value) || 1); });
+    ADV.forEach(function (k) { body[k] = Math.max(1, num($("#s-" + k).value) || 1) * 60; });
     BOOLS.forEach(function (k) { body[k] = $("#s-" + k).checked; });
+    LOG_INTS.forEach(function (k) { body[k] = Math.max(0, Math.round(num($("#s-" + k).value))); });
+    body.log_full = $("#s-log_full").checked;
     body.office_theme_times = {};
     TIMES.forEach(function (k) { var v = $("#t-" + k).value; if (/^\d{2}:\d{2}$/.test(v)) { body.office_theme_times[k] = v; } });
     var box = $("#set-msg");
@@ -277,7 +340,9 @@ details.form[open]>summary{margin-bottom:10px}
           return;
         }
         PRMS.forEach(function (k) { $("#s-" + k).value = r[k]; });
+        ADV.forEach(function (k) { $("#s-" + k).value = Math.max(1, Math.round((Number(r[k]) || 0) / 60)); });
         BOOLS.forEach(function (k) { $("#s-" + k).checked = r[k] !== false; });
+        fillLogs(r);
         fillTimes(r.office_theme_times);
         box.className = "saved";
         box.textContent = T("st.saved");
@@ -390,6 +455,53 @@ details.form[open]>summary{margin-bottom:10px}
     }).catch(function (e) { btn.disabled = false; $("#tmp-msg").textContent = T("st.tmpFail", { why: String(e) }); });
   };
   loadTmp();
+
+  /* ---------- 数据目录：占多大 + 现在压缩结束的卡的运行记录（在后台整理，好了再刷新） ---------- */
+  function mb(b) { return (num(b) / 1048576).toFixed(1); }
+  function loadData() {
+    return api("/api/data", { cache: "no-store" }).then(function (r) {
+      $("#data-size").textContent = T("st.dataSize", { n: mb(r && r.bytes), l: mb(r && r.log_bytes), g: mb(r && r.gz_bytes) });
+      return r || {};
+    }).catch(function () { $("#data-size").textContent = T("st.unknown"); return {}; });
+  }
+  function waitData(btn) {
+    loadData().then(function (r) {
+      if (r.cleaning) { setTimeout(function () { waitData(btn); }, 2000); return; }
+      btn.disabled = false;
+      $("#data-msg").textContent = T("st.dataCleaned");
+    });
+  }
+  $("#btn-dataclean").onclick = function () {
+    var btn = this;
+    btn.disabled = true;
+    $("#data-msg").textContent = T("st.dataCleaning");
+    api("/api/data/clean", post({})).then(function () { waitData(btn); })
+      .catch(function (e) { btn.disabled = false; $("#data-msg").textContent = T("st.tmpFail", { why: String(e) }); });
+  };
+  loadData();
+
+  /* ---------- 从旧版导入：先确认，再把旧文件夹换进来（后端不过就原样留着） ---------- */
+  $("#btn-import-old").onclick = function () {
+    var path = ($("#import-path").value || "").trim();
+    if (!path) { $("#import-msg").textContent = T("st.importOldNeed"); return; }
+    $("#importDlgText").textContent = T("st.importOldAsk", { path: path });
+    $("#importDlg").hidden = false;
+  };
+  $("#importDlgNo").onclick = function () { $("#importDlg").hidden = true; };
+  $("#importDlgYes").onclick = function () {
+    var path = ($("#import-path").value || "").trim();
+    var btn = $("#btn-import-old");
+    $("#importDlg").hidden = true;
+    btn.disabled = true;
+    $("#import-msg").textContent = T("st.importOldWorking");
+    api("/api/import_old", post({ path: path })).then(function (r) {
+      btn.disabled = false;
+      $("#import-msg").textContent = (r && r.text) || T("st.importOldFail");
+    }).catch(function (e) {
+      btn.disabled = false;
+      $("#import-msg").textContent = T("st.tmpFail", { why: String(e) });
+    });
+  };
 
   /* ---------- 重置所有：两次确认 → 像素进度条 → 回首页走上岗 ---------- */
   var RESET_TEXT = T("st.resetText");

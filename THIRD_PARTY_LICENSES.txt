@@ -1,4 +1,4 @@
-agentboxbox 0.4.0 第三方许可全文 / Third-party license texts
+agentboxbox 0.5.0 第三方许可全文 / Third-party license texts
 由 packaging/licenses.py 生成，不要手改。agentboxbox 自己的代码是 MIT 许可，见 LICENSE。
 说明和合规要点（尤其是 pystray 的 LGPL-3.0）见 THIRD_PARTY_NOTICES.md。
 

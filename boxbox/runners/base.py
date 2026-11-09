@@ -32,6 +32,7 @@ class Heartbeat:
     evidence: str = ""          # pid | log | event | tool
     n_tools: int | None = None
     finished: bool = False       # process gone; call finish()
+    progress: dict | None = None  # 最近一次工具 / 模型输出，看门狗写进 runs
 
 
 @dataclass
@@ -47,6 +48,8 @@ class RunResult:
     suspect_why: str = ""
     n_tools: int | None = None    # 这一轮事件流里调过几次工具（Pi），用来分「回排队」还是「进中断」
     iface_error: str = ""         # 模型接口连不上了（自重试失败 / 网络类报错）：报错原文，空 = 不是这件事
+    stderr: str = ""              # 进程报错输出的最后几行（还没打码）；收尾写原因时用，空 = 没有
+    split: dict | None = None     # 模型/命令用时等，收工时从事件流算好；空着就是这次没记（老运行）
 
 
 class Runner:
@@ -84,6 +87,15 @@ class Runner:
     def adopt(self, run_row: dict) -> RunHandle:
         """按 runs 表里的一行重新接管一个 run（核心重启过 / 运行器被换掉以后）。"""
         raise NotImplementedError
+
+    def stop(self, run_id: str) -> bool:
+        """停掉这一次运行的进程。没有自己进程的运行器返回 True（没什么要停的）。
+        返回 False：没停掉，调用方再按 pid 试一次。"""
+        return True
+
+    def discard(self, run_id: str) -> None:
+        """进程已经停了，丢掉手里的记录。不解释退出码，也不删对话目录。"""
+        return None
 
     def stop_all(self) -> list[str]:
         """核心退出时结束本运行器起的所有进程，返回被中断的 run_id。没有自己进程的运行器什么都不做。"""

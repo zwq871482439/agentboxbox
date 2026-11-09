@@ -5,7 +5,8 @@
 HTTP 401/403 → key 不对；超时 / 连不上 → 网络问题；字段缺失 → 接口变了。
 
 key 从工位取（只从 data/secrets.json 来），只用来发请求：
-绝不写进日志、事件、返回值。同一个 (适配器, key) 的查询 30 秒内只发一次，结果给这几个工位共用。
+绝不写进日志、事件、返回值，也不进 kv 的键。同一份额度（适配器 + key + 自定义查询配置）
+只存一份；30 秒内的重复查询合并成一次请求。
 
 仅标准库。真联网的只有 _http_get（测试注入 http_get 参数换掉它）。"""
 from __future__ import annotations
@@ -32,12 +33,14 @@ KIMI_URL = "https://api.kimi.com/coding/v1/usages"
 GLM_URL = "https://open.bigmodel.cn/api/monitor/usage/quota/limit"
 MINIMAX_URL = "https://www.minimax.cn/v1/token_plan/remains"
 
-_DEDUP_TTL = 30.0          # 秒：同一把 key 这么久以内只查一次
+_DEDUP_TTL = 30.0          # 秒：同一份额度这么久以内只查一次
 _dedup_locks: dict[str, threading.Lock] = {}
 _dedup_cache: dict[str, tuple[float, dict]] = {}
 
 WINDOW_LABELS = ("h5", "week", "month", "tools", "plan")   # 窗口名字的机器值（其余原样，不当成词条翻）
-_busy: set[str] = set()    # 正在后台查余量的工位
+# 自定义查询里真正影响请求的字段（顺序固定，好让同一份配置算出同一个账户）
+_CUSTOM_FIELDS = ("url", "auth", "pct_path", "remaining_pct_path", "reset_path")
+_busy: set[str] = set()    # 正在后台查的额度账户（同一份额度同时只查一条）
 _busy_lock = threading.Lock()
 
 _AUTH_WORDS = re.compile(r"(?i)auth|api[ _-]?key|鉴权|密钥|无效|token|unauthorized|forbidden")
@@ -366,9 +369,88 @@ def station_key(st: dict) -> str | None:
     return config.get_secret(sid) or None
 
 
+def _custom_sig(custom) -> str:
+    """自定义查询配置的稳定串。没填和空串算同一份，免得同一把 key 被拆成两个账户。"""
+    cfg = custom if isinstance(custom, dict) else {}
+    return "\x1f".join(str(cfg.get(k) or "").strip() for k in _CUSTOM_FIELDS)
+
+
+def _account_id(adapter: str, key: str | None, custom) -> str:
+    """额度账户。key 只进哈希，哈希进 kv 的键，key 原文不进键也不进值。"""
+    raw = "%s\0%s\0%s" % (adapter, key or "", _custom_sig(custom))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def account_id(st: dict) -> str:
+    """这个工位所属的额度账户。"""
+    q = (st or {}).get("quota") or {}
+    return _account_id(station_adapter(st or {}), station_key(st or {}), q.get("custom"))
+
+
+def acct_key(st: dict) -> str:
+    """余量在 kv 里的键：quota:acct:<哈希>。"""
+    return "quota:acct:" + account_id(st)
+
+
+def _newest_legacy(store, aid: str) -> dict | None:
+    """老版本按工位存的结果。账户记录还没有时，取共用工位里最新的一份顺过来，升级后第一次打开就有数。"""
+    best = None
+    best_ts = ""
+    for s2 in config.stations():
+        if account_id(s2) != aid:
+            continue
+        old = store.kv_get("quota:" + str(s2.get("id") or ""))
+        if not isinstance(old, dict):
+            continue
+        ts = str(old.get("fetched") or "")
+        if best is None or ts > best_ts:
+            best, best_ts = dict(old), ts
+    return best
+
+
+def read(store, st: dict | None):
+    """工位 → 额度账户 → 结果。没有账户记录时，把共用工位里最新的老记录顺过来。"""
+    if store is None or not isinstance(st, dict) or not st.get("id"):
+        return None
+    key = acct_key(st)
+    got = store.kv_get(key)
+    if isinstance(got, dict):
+        return got
+    legacy = _newest_legacy(store, account_id(st))
+    if legacy is None:
+        return None
+    again = store.kv_get(key)
+    if isinstance(again, dict):
+        return again
+    try:
+        store.kv_set(key, legacy)
+    except Exception:  # noqa: BLE001 - 顺不过去也先把数给用户看
+        return legacy
+    return legacy
+
+
+def peers(st: dict) -> list[str]:
+    """和这只猫共用一份额度的其它工位。没有 key 的不算共用（说「共用一把 key」会是假的）。"""
+    if not st or st.get("client") != "pi" or not station_key(st):
+        return []
+    aid = account_id(st)
+    sid = str(st.get("id") or "")
+    names = []
+    for s2 in config.stations():
+        if s2.get("client") != "pi":
+            continue
+        other = str(s2.get("id") or "")
+        if not other or other == sid or not station_key(s2):
+            continue
+        if account_id(s2) == aid:
+            names.append(other)
+    names.sort()
+    return names
+
+
 def _dedup_fetch(adapter: str, key: str | None, custom: dict | None, timeout_s: float, http_get=None) -> dict:
-    """同一个 (适配器, key) 30 秒内只查一次，结果共用。key 只进哈希，不进结果。"""
-    k = hashlib.sha256(("%s\0%s" % (adapter, key or "")).encode("utf-8")).hexdigest()[:16]
+    """同一份额度 30 秒内只查一次。key 只进哈希，不进结果。"""
+    k = _account_id(adapter, key, custom)
     lk = _dedup_locks.setdefault(k, threading.Lock())
     with lk:
         hit = _dedup_cache.get(k)
@@ -380,14 +462,15 @@ def _dedup_fetch(adapter: str, key: str | None, custom: dict | None, timeout_s: 
 
 
 def check_station(st: dict, store=None, timeout_s: float = 30.0, http_get=None) -> dict:
-    """查一个工位的余量，结果存 kv quota:<工位>（失败也存，顺便当节流时间戳）。"""
+    """查这个工位所属额度账户的余量，结果存 kv（失败也存，顺便当节流时间戳）。"""
     adapter = station_adapter(st)
-    out = dict(_dedup_fetch(adapter, station_key(st), (st.get("quota") or {}).get("custom"), timeout_s, http_get))
+    custom = (st.get("quota") or {}).get("custom")
+    out = dict(_dedup_fetch(adapter, station_key(st), custom, timeout_s, http_get))
     out["adapter"] = adapter
     out["fetched"] = now_iso()
     if store is not None:
         try:
-            store.kv_set("quota:" + str(st.get("id") or ""), out)
+            store.kv_set(acct_key(st), out)
         except Exception:  # noqa: BLE001 - 存不进去别影响把结果给用户
             pass
     return out
@@ -411,8 +494,8 @@ def after_run(store, station_id: str) -> threading.Thread | None:
 
 
 def due_stations(store) -> list[dict]:
-    """看门狗用：到点该查余量的 interval 工位（没查过 / 距上次超过间隔分钟 / 没在查）。"""
-    out = []
+    """看门狗用：到点该查的额度账户。间隔取共用工位里最短的，每个账户只回一个工位。"""
+    groups: dict[str, list[tuple[int, dict]]] = {}
     with _busy_lock:
         busy = set(_busy)
     for st in config.stations():
@@ -423,39 +506,43 @@ def due_stations(store) -> list[dict]:
             interval_min = max(1, int(q.get("interval_min") or 30))
         except (TypeError, ValueError):
             interval_min = 30
-        last = (store.kv_get("quota:" + str(st.get("id") or "")) or {}).get("fetched")
-        if last and _mins_since(last) < interval_min:
+        groups.setdefault(account_id(st), []).append((interval_min, st))
+    out = []
+    for aid, items in groups.items():
+        if aid in busy:
             continue
-        if str(st.get("id") or "") in busy:
+        items.sort(key=lambda it: (it[0], str(it[1].get("id") or "")))
+        shortest, rep = items[0]
+        last = (read(store, rep) or {}).get("fetched")
+        if last and _mins_since(last) < shortest:
             continue
-        out.append(st)
+        out.append(rep)
     return out
 
 
 def spawn(st: dict, store) -> threading.Thread | None:
-    """起后台线程查这个工位；同一个工位同时只起一条。"""
-    sid = str(st.get("id") or "")
+    """起后台线程查这个额度账户；同一个账户同时只起一条。"""
+    aid = account_id(st)
     with _busy_lock:
-        if sid in _busy:
+        if aid in _busy:
             return None
-        _busy.add(sid)
-    t = threading.Thread(target=_bg_check, args=(st, store), name="boxbox-quota", daemon=True)
+        _busy.add(aid)
+    t = threading.Thread(target=_bg_check, args=(st, store, aid), name="boxbox-quota", daemon=True)
     t.start()
     return t
 
 
-def _bg_check(st: dict, store) -> None:
-    sid = str(st.get("id") or "")
+def _bg_check(st: dict, store, aid: str) -> None:
     try:
         check_station(st, store)
     except Exception as e:  # noqa: BLE001 - 查余量坏了不能带崩核心
         try:
             if store is not None:
-                store.kv_set("quota:" + sid, {"ok": False, "error_kind": "changed",
-                                              "error_code": "check_failed", "error_vars": {"msg": str(e)[:120]},
-                                              "fetched": now_iso()})
+                store.kv_set("quota:acct:" + aid, {"ok": False, "error_kind": "changed",
+                                                   "error_code": "check_failed", "error_vars": {"msg": str(e)[:120]},
+                                                   "fetched": now_iso()})
         except Exception:  # noqa: BLE001
             pass
     finally:
         with _busy_lock:
-            _busy.discard(sid)
+            _busy.discard(aid)

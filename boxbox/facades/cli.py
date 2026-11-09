@@ -22,6 +22,7 @@ import urllib.error
 import urllib.request
 
 from .. import connectors, i18n
+from .http_const import WAIT_MAX_S
 from .mcp_stdio import _get, _post
 
 _CLI_LANG = [None]        # 命令行自己的语言：--lang 给的，或跟核心走
@@ -75,7 +76,7 @@ def _lang(core: str) -> str | None:
 
 
 def _cmd_wait(core: str, a, lg: str | None = None) -> int:
-    """等猫猫交回卡：连本机核心，每轮调一次 wait_for_update（每次最多 120 秒）。
+    """等猫猫交回卡：连本机核心，每轮调一次 wait_for_update（每次最多 100 秒，给客户端留出收回话的时间）。
     有新动静就一行一行打印，退出码 0；等不到打印「没新消息」，退出码 2；核心连不上退出码 3。"""
     station = a.station or os.environ.get("BOXBOX_STATION") or i18n.t("cli.default_station", lg)
     url = connectors.mcp_url(station, core)
@@ -85,7 +86,7 @@ def _cmd_wait(core: str, a, lg: str | None = None) -> int:
         left = int(deadline - time.time())
         if left <= 0:
             break
-        chunk = max(1, min(120, left))
+        chunk = max(1, min(WAIT_MAX_S, left))
         try:
             res = _rpc_call(url, "wait_for_update", {"timeout_s": chunk}, timeout=chunk + 15)
         except Exception as e:  # noqa: BLE001 - 连不上就是核心没开
@@ -107,6 +108,12 @@ def _cmd_wait(core: str, a, lg: str | None = None) -> int:
 
 
 def main(argv=None) -> int:
+    # 无窗口的 exe 不是从终端起的（后台启动、计划任务）：没有控制台，stdout / stderr 是 None，
+    # 一写就崩、弹「Unhandled exception」。先接到空设备上；托盘模式之后会换成 tray.log
+    if sys.stdout is None or sys.stderr is None:
+        devnull = open(os.devnull, "w", encoding="utf-8")
+        sys.stdout = sys.stdout or devnull
+        sys.stderr = sys.stderr or devnull
     for s in (sys.stdout, sys.stderr):          # Chinese text on a GBK console (Windows) -> force UTF-8
         try:
             s.reconfigure(encoding="utf-8", errors="replace")

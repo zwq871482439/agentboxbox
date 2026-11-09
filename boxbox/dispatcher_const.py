@@ -25,6 +25,12 @@ REST_KV = "resting"
 REST_TRY_KV = "rest_tries"
 
 
+WAIT_CONFIG = "config"   # 配置错了：排队等用户改，不进歇着那套到点自动回来
+
+
+CONFIG_KV = "config_bad"
+
+
 NET_RETRY_KEY = "iface_retries"
 
 
@@ -56,5 +62,11 @@ INTERRUPT_KIND = "interrupt_kind"
 
 
 ASKED_KV = "interrupted_asked"
+
+
+QUEUE_FRONT = "queue_front"   # 打回过的卡已经做过一轮，排队时排在这只猫的新卡前面
+
+
+NOTE_FOLLOW_MAX = 2   # 一轮里「干完接着说」最多两次，再多就交回，待办里告诉首领还有几条没看
 
 

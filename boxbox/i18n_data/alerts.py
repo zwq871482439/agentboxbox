@@ -12,10 +12,15 @@ ZH = {
     "alert.level2.reviewing": "等首领验收",
     "alert.level2.interrupted": "中断了",
     "alert.level2.unstarted": "没开工",
+    "alert.level2.maybe_stuck": "可能卡住了",
     "alert.scheduled_late": "{station} 的定时任务没按时来",
     "alert.scheduled_late.action": "去客户端里看看定时任务还在不在",
     "alert.leader_quiet": "首领好一会儿没来看了",
     "alert.leader_quiet.action": "复制一段话，贴回首领的会话里叫醒它",
+    "alert.config_bad": "{station} 的配置有问题：{why}",
+    "alert.config_bad.action": "去工位页点「修改配置」",
+    "alert.leader_shared": "两个对话在用同一个首领「{station}」",
+    "alert.leader_shared.action": "去工位页点「再加一个首领」",
 }
 
 EN = {
@@ -28,8 +33,13 @@ EN = {
     "alert.level2.reviewing": "is waiting for the leader",
     "alert.level2.interrupted": "was interrupted",
     "alert.level2.unstarted": "never started",
+    "alert.level2.maybe_stuck": "may be stuck",
     "alert.scheduled_late": "{station}'s scheduled task did not arrive on time",
     "alert.scheduled_late.action": "Check in your app whether the scheduled task is still there",
     "alert.leader_quiet": "The leader has not been around for a while",
     "alert.leader_quiet.action": "Copy the wake-up text and paste it into the leader's chat",
+    "alert.config_bad": "{station} has a config problem: {why}",
+    "alert.config_bad.action": "Open the Stations page and click Change settings",
+    "alert.leader_shared": "Two chats are using the same leader “{station}”",
+    "alert.leader_shared.action": "Open the Stations page and click Add another leader",
 }

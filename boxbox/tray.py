@@ -230,7 +230,7 @@ _NOTIFY_ONE = {
     "returned": "tray.notify.returned",
     "pending": "tray.notify.pending",
     "not_started": "tray.notify.not_started",
-    "failed": "tray.notify.failed",
+    "failed": "tray.notify.failed", "config": "tray.notify.config",
     "stuck": "tray.notify.stuck",
     "issue": "tray.notify.issue",
 }
@@ -238,11 +238,11 @@ _NOTIFY_MANY = {
     "returned": "tray.notify.many_returned",
     "pending": "tray.notify.many_pending",
     "not_started": "tray.notify.many_not_started",
-    "failed": "tray.notify.many_failed",
+    "failed": "tray.notify.many_failed", "config": "tray.notify.many_config",
     "stuck": "tray.notify.many_stuck",
     "issue": "tray.notify.many_issue",
 }
-_NOTIFY_TAIL = {"returned": "tray.notify.tail_returned"}
+_NOTIFY_TAIL = {"returned": "tray.notify.tail_returned", "config": "tray.notify.tail_config"}
 _NOTIFY_TAIL_DEFAULT = "tray.notify.tail"
 
 
@@ -265,7 +265,11 @@ def _notify_kind(store, ev: dict) -> str:
     if kind == "review":
         return "" if str(data.get("verdict") or "return") == "accept" else "pending"
     if kind == "failed":
+        if data.get("config"):
+            return "config"                                 # 配置错了：叫用户去改，不是只叫首领
         return "not_started" if (tid and not store.runs_for_task(tid)) else "failed"
+    if kind == "maybe_stuck":
+        return "stuck"                                       # 在跑的卡好久没动静：跟「卡住了」同一条通知
     if kind == "report":
         status = str(data.get("status") or "")
         if status == "blocked":
@@ -312,7 +316,7 @@ class TrayNotifier:
         没有了或攒过合并窗口才弹。"""
         added = False
         try:
-            for ev in self.store.events_after(self.after, LEADER_EVENT_KINDS, limit=50):
+            for ev in self.store.events_after(self.after, LEADER_EVENT_KINDS + ("maybe_stuck",), limit=50):
                 self.after = max(self.after, int(ev.get("id") or 0))
                 it = _notify_item(self.store, ev)
                 if it:

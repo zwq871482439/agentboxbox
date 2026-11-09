@@ -85,8 +85,9 @@
     } else if (d.quota && d.quota.ok === false) {
       qb = T("st.quotaFail", { kind: d.quota.error_kind || T("st.quotaUnknown"), why: d.quota.error || "" });
     }
-    if (d.quota_peers && d.quota_peers.length) {           /* 同服务商的几只猫共用一份额度 */
-      qb += '<p class="hint">' + esc(T("st.quotaPeers", { names: d.quota_peers.join(", ") })) + "</p>";
+    if (d.quota_peers && d.quota_peers.length) {           /* 共用一把 key 的猫，额度是同一份 */
+      var peerSep = (window.BXi18n && window.BXi18n.lang() === "en") ? ", " : "、";
+      qb += '<p class="hint">' + esc(T("st.quotaPeers", { names: d.quota_peers.join(peerSep) })) + "</p>";
     }
     cfg += '<div class="dsec"><h3>' + esc(T("st.kv.quotaLeft")) + "</h3>" + qb + "</div>";
     return cfg;

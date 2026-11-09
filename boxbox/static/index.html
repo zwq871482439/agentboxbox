@@ -56,6 +56,10 @@
     <summary data-i18n="bd.tok.summary">用量（token）：近 7 天每次运行实际消耗多少</summary>
     <div class="dbody" id="tokBody"><div class="empty" data-i18n="bd.tok.emptyHint">还没有用量。等工位跑过一轮再来看。</div></div>
   </details>
+  <details class="panel" id="effBox" open>
+    <summary data-i18n="bd.eff.summary">效率：近 7 天每张卡、每只猫花了多少</summary>
+    <div class="dbody" id="effBody"><div class="empty" data-i18n="bd.eff.loading">正在读取…</div></div>
+  </details>
 </div>
 
 <footer id="foot"></footer>
@@ -63,6 +67,7 @@
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" hidden></aside>
 
+<script src="/static/board-eff.js"></script>
 <script src="/static/board.js"></script>
 </body>
 </html>

@@ -96,7 +96,7 @@
     return w === key ? T("bd.exitOther", { v: v }) : w;
   }
 
-  var S = { meta: null, stations: [], todo: null, tasks: [], tokens: null, doctor: null, down: true, stamp: "—",
+  var S = { meta: null, stations: [], todo: null, tasks: [], tokens: null, eff: null, doctor: null, down: true, stamp: "—",
             stationDefs: null, defsReq: null };
   var openKeys = {};       /* 记住折叠区展开状态 */
   var detail = null;       /* {kind:'task'|'station', id, data} */
@@ -139,7 +139,8 @@
     box.innerHTML = list.map(function (s) {
       /* 待定时任务 / 在岗（定时）和「闲」一样是灰词；定时任务没触发是红的 */
       var code = s.word_code || "";
-      var wc = (code === "running" || code === "running_queue") ? " word-run"
+      var wc = (code === "stuck" || code === "config") ? " word-stuck"
+        : (code === "running" || code === "running_queue") ? " word-run"
         : (code === "rest" ? " word-rest"   /* 歇着：额度用完，等重置 */
         : (code === "sched_late" ? " word-late" : (s.enabled ? "" : " word-off")));
       var task = '<div class="title" title="' + esc(s.title) + '">' + esc(s.title || "") + "</div>";   /* 固定高度：不填也在，三条一样高 */
@@ -333,6 +334,9 @@
       (rows.length ? rows.join("")
         : '<tr><td colspan="9" class="empty">' + esc(T("bd.tok.empty")) + "</td></tr>") + "</tbody></table></div>" +
       (rows.length ? '<p class="hint">' + esc(d.note || T("bd.tok.note")) + " " + esc(T("bd.tok.since")) + " " + esc(when(d.since)) + "</p>" : "");
+  }
+  function renderEff() {
+    if (window.BXEff) { window.BXEff.render(S.eff); }
   }
 
 
@@ -600,9 +604,13 @@
   function pollHeavy() {
     var jobs = [];
     if ($("#tokBox").open) jobs.push(api("/api/tokens?days=7").then(function (r) { if (r.ok) { S.tokens = r.data; renderTokens(); } }));
+    if ($("#effBox") && $("#effBox").open) {
+      jobs.push(api("/api/efficiency?days=7").then(function (r) { if (r.ok) { S.eff = r.data; renderEff(); } }));
+    }
     return Promise.all(jobs);
   }
   $("#tokBox").addEventListener("toggle", function () { if ($("#tokBox").open) { renderTokens(); pollHeavy(); } });
+  if ($("#effBox")) { $("#effBox").addEventListener("toggle", function () { if ($("#effBox").open) { renderEff(); pollHeavy(); } }); }
   addEventListener("bx-summon", function (e) { e.preventDefault(); openStation(e.detail); });
   $("#tkDays").onchange = function () { tkPage = 0; tkSyncRange(); renderTasks(); };
   $("#tkFrom").onchange = function () { tkPage = 0; renderTasks(); };
@@ -626,11 +634,11 @@
   };
   $("#scrim").onclick = closeDrawer;
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
-  window.BXBoard = { pickTasks: tkPick, filter: tkFilter };   /* 给测试直接喂数据调筛选逻辑 */
+  window.BXBoard = { pickTasks: tkPick, filter: tkFilter, openTask: openTask };   /* 给测试直接喂数据调筛选逻辑 */
 
   /* 换语言：整页重画一遍 */
   addEventListener("bx-lang-changed", function () {
-    renderStations(); renderTodo(); renderTasks(); renderTokens();
+    renderStations(); renderTodo(); renderTasks(); renderTokens(); renderEff();
     if (detail) { drawDrawer(); }
   });
 

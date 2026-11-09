@@ -22,6 +22,8 @@ ZH = {
     "leader.event.rest_out": "{sid} {word}",
     "leader.event.rest_back": "{sid} 回来了，接着干 {tid}",
     "leader.no_news": "没新消息",
+    "leader.wait_capped": "你写了等 {n} 秒，超过上限，这次按 {cap} 秒等。"
+                          "上限按 Cursor 收回话的时限留了余量（大约 115 秒）。",
     "leader.event.handoff": "用户把 {n} 张中断的卡交给你决定",
     "leader.event.tail": "{tid}（{title}）",
     "leader.nudge": "{n} 件等你处理，{m} 个工位闲着；调 get_todo 看清单",
@@ -36,6 +38,14 @@ ZH = {
                          "先发 {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}，之后所有 boxbox 工具都这样调。",
     "leader.hire.line4": "地址连不上（拒绝连接）= 猫猫盒子没开：停下来请用户先打开它再继续，"
                          "别去找别的端口或别的目录里的盒子。",
+    "leader.event.returned_go": "{head} 打回 {tail}，已重派给 {sid}（第 {n} 轮）",
+    "leader.event.returned_queued": "{head} 打回 {tail}，已排队给 {sid}（第 {n} 轮）",
+    "leader.nudge.pending": "还等你处理：{n} 张",
+    "leader.nudge.card": "{tid} {kind} {title}",
+    "leader.nudge.more": "还有 {n} 张，调 get_todo 看全部",
+    "leader.event.half": "{head} {phrase} {tail}",
+    "leader.shared": "还有另一个对话也在用「{station}」当首领：待办、交回和验收两边共用。"
+                     "要分开，请用户在工位页点「再加一个首领」，把新地址给其中一个对话。",
 }
 
 EN = {
@@ -62,6 +72,8 @@ EN = {
     "leader.event.rest_out": "{sid} {word}",
     "leader.event.rest_back": "{sid} is back, carrying on with {tid}",
     "leader.no_news": "no new messages",
+    "leader.wait_capped": "You asked to wait {n} seconds. That is over the cap, so this wait is {cap} seconds. "
+                          "The cap leaves room for Cursor to receive the reply (about 115 seconds).",
     "leader.event.handoff": "The user left {n} interrupted cards for you to decide",
     "leader.event.tail": "{tid} ({title})",
     "leader.nudge": "{n} things to handle, {m} stations idle; call get_todo for the list",
@@ -80,4 +92,13 @@ EN = {
     "leader.hire.line4": "If the address refuses the connection, agentboxbox isn't running: "
                          "stop and ask the user to open it first, and do not look for another port or another copy "
                          "of the box.",
+    "leader.event.returned_go": "{head} returned {tail}, reassigned to {sid} (round {n})",
+    "leader.event.returned_queued": "{head} returned {tail}, queued for {sid} (round {n})",
+    "leader.nudge.pending": "Cards waiting on you: {n}",
+    "leader.nudge.card": "{tid} {kind} {title}",
+    "leader.nudge.more": "{n} more; call get_todo for all of them",
+    "leader.event.half": "{head} {phrase} {tail}",
+    "leader.shared": "Another chat is also using “{station}” as the leader: the to-do list, hand-backs and reviews "
+                     "are shared. To split them, ask the user to click Add another leader on the Stations page "
+                     "and give the new address to one of the chats.",
 }

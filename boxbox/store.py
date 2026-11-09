@@ -13,16 +13,20 @@ import threading
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks(
   id TEXT PRIMARY KEY, title TEXT, kind TEXT, assignee TEXT, state TEXT, round INTEGER DEFAULT 1,
-  parent TEXT, returned_reason TEXT, created_by TEXT, dispatcher TEXT,
+  parent TEXT, returned_reason TEXT, cancel_note TEXT, created_by TEXT, dispatcher TEXT,
   created_at TEXT, updated_at TEXT, delivered_at TEXT, done_at TEXT,
   acceptance_json TEXT, card_json TEXT, card_path TEXT);
 CREATE INDEX IF NOT EXISTS tasks_state ON tasks(state);
 CREATE TABLE IF NOT EXISTS runs(
   run_id TEXT PRIMARY KEY, task_id TEXT, station TEXT, runner TEXT, attempt INTEGER DEFAULT 1,
-  worktree TEXT, lock_owner TEXT, commit_range TEXT, pid INTEGER, session_id TEXT,
+  worktree TEXT, lock_owner TEXT, commit_range TEXT, pid INTEGER,   session_id TEXT,
   session_dir TEXT,
+  last_tool TEXT, last_tool_at TEXT, last_tool_cmd TEXT, last_tool_out TEXT,
+  last_output_at TEXT, last_model_at TEXT, last_tool_end_at TEXT, tool_open TEXT,
+  stall_kind TEXT, stall_since TEXT,
   started TEXT, first_activity TEXT, last_activity TEXT, ended TEXT,
-  exit INTEGER, status TEXT, tokens_json TEXT, commits INTEGER, dirty INTEGER, log_path TEXT, error TEXT);
+  exit INTEGER, status TEXT, tokens_json TEXT, commits INTEGER, dirty INTEGER, log_path TEXT, error TEXT,
+  split_json TEXT);
 CREATE INDEX IF NOT EXISTS runs_station_ended ON runs(station, ended);
 CREATE TABLE IF NOT EXISTS token_ledger(
   run_id TEXT, seq INTEGER, station TEXT, task_id TEXT,
@@ -55,6 +59,23 @@ def today_key() -> str:
     return _dt.datetime.now().strftime("%Y%m%d")
 
 
+def _with_card_state(card_json, state):
+    """卡快照里的 state 跟着任务表走。没快照或解析不了就原样返回。"""
+    if not card_json or state is None:
+        return card_json
+    try:
+        card = json.loads(card_json) if isinstance(card_json, str) else dict(card_json)
+    except (TypeError, ValueError):
+        return card_json
+    if not isinstance(card, dict):
+        return card_json
+    if card.get("state") == state and isinstance(card_json, str):
+        return card_json
+    card = dict(card)
+    card["state"] = state
+    return json.dumps(card, ensure_ascii=False)
+
+
 class Store:
     def __init__(self, path):
         self.path = str(path)
@@ -62,18 +83,31 @@ class Store:
         self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
         self.db.row_factory = sqlite3.Row
         with self.lock:
-            self.db.executescript(SCHEMA)
-            # 老库补列（onboard v0.2 §9）：stations_state.first_seen —— 该工位第一次来调 get_briefing 的时间
-            # 老库补列：runs.session_dir —— 这一轮 Pi 的对话记录目录（中断后要靠它接着做）
-            rcols = {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}
-            if "session_dir" not in rcols:
-                self.db.execute("ALTER TABLE runs ADD COLUMN session_dir TEXT")
-            cols = {r[1] for r in self.db.execute("PRAGMA table_info(stations_state)")}
-            if "first_seen" not in cols:
-                self.db.execute("ALTER TABLE stations_state ADD COLUMN first_seen TEXT")
-                # 老库里早就来过的工位（有 last_seen）当然握过手：回填，不然升级后首页会把老用户踢回上岗页第 4 步
-                self.db.execute("UPDATE stations_state SET first_seen=last_seen WHERE first_seen IS NULL AND last_seen IS NOT NULL")
-            self.db.commit()
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """补上后来才加的列。调用方拿着 self.lock。
+        导入会把整库换掉，换完还要再走一遍：旧库是按当时的表建的。"""
+        self.db.executescript(SCHEMA)
+        # 老库补列（onboard v0.2 §9）：stations_state.first_seen —— 该工位第一次来调 get_briefing 的时间
+        # 老库补列：runs.session_dir —— 这一轮 Pi 的对话记录目录（中断后要靠它接着做）
+        # 老库补列：新装的库 CREATE 里已经有，升级上来的才缺
+        self._add_cols("runs", ("session_dir", "last_tool", "last_tool_at", "last_tool_cmd", "last_tool_out",
+                                "last_output_at", "last_model_at", "last_tool_end_at", "tool_open",
+                                "stall_kind", "stall_since", "split_json"))
+        self._add_cols("tasks", ("cancel_note",))
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(stations_state)")}
+        if "first_seen" not in cols:
+            self.db.execute("ALTER TABLE stations_state ADD COLUMN first_seen TEXT")
+            # 老库里早就来过的工位（有 last_seen）当然握过手：回填，不然升级后首页会把老用户踢回上岗页第 4 步
+            self.db.execute("UPDATE stations_state SET first_seen=last_seen WHERE first_seen IS NULL AND last_seen IS NOT NULL")
+        self.db.commit()
+
+    def _add_cols(self, table: str, cols: tuple) -> None:
+        have = {r[1] for r in self.db.execute("PRAGMA table_info(%s)" % table)}
+        for col in cols:
+            if col not in have:
+                self.db.execute("ALTER TABLE %s ADD COLUMN %s TEXT" % (table, col))
 
     def close(self) -> None:
         """核心退出时关掉数据库（不然 boxbox.db 一直被占着）。关了以后再写会抛 ProgrammingError。"""
@@ -115,8 +149,19 @@ class Store:
 
     def update_task(self, task_id: str, **fields) -> None:
         fields["updated_at"] = now_iso()
-        sets = ",".join("%s=?" % k for k in fields)
-        self._exec("UPDATE tasks SET %s WHERE id=?" % sets, tuple(fields.values()) + (task_id,))
+        with self.lock:
+            if "state" in fields:
+                # 和这次写入放在同一把锁里：心跳改状态时，别用过期快照盖掉别人刚写进卡里的字段
+                raw = fields.get("card_json")
+                if raw is None:
+                    row = self.db.execute("SELECT card_json FROM tasks WHERE id=?", (task_id,)).fetchone()
+                    raw = row["card_json"] if row else None
+                synced = _with_card_state(raw, fields["state"])
+                if synced is not None:
+                    fields["card_json"] = synced
+            sets = ",".join("%s=?" % k for k in fields)
+            self.db.execute("UPDATE tasks SET %s WHERE id=?" % sets, tuple(fields.values()) + (task_id,))
+            self.db.commit()
 
     def get_task(self, task_id: str) -> dict | None:
         t = self._row("SELECT * FROM tasks WHERE id=?", (task_id,))
@@ -163,6 +208,40 @@ class Store:
 
     def recent_runs(self, limit: int = 50) -> list[dict]:
         return self._rows("SELECT * FROM runs ORDER BY started DESC LIMIT ?", (limit,))
+
+    def runs_overlapping(self, since_iso: str) -> list[dict]:
+        """窗口里结束的运行，加上还没结束的。效率面板和「有活时几只猫在干」共用这一份，页面不再重扫日志。"""
+        return self._rows(
+            "SELECT * FROM runs WHERE (ended IS NOT NULL AND ended>=?) "
+            "OR (ended IS NULL AND started IS NOT NULL) ORDER BY started",
+            (since_iso,))
+
+    def tasks_done_since(self, since_iso: str) -> list[dict]:
+        """验收完落在窗口里、而且交回时间还在的卡。等了多久用这两个时间相减。"""
+        return self._rows(
+            "SELECT id, title, assignee, state, delivered_at, done_at FROM tasks "
+            "WHERE done_at>=? AND delivered_at IS NOT NULL AND delivered_at!=''",
+            (since_iso,))
+
+    def tasks_brief(self, ids: list[str]) -> list[dict]:
+        out: list[dict] = []
+        for i in range(0, len(ids), 400):
+            chunk = [str(x) for x in ids[i:i + 400] if x]
+            if not chunk:
+                continue
+            q = ",".join("?" * len(chunk))
+            out.extend(self._rows("SELECT id, title, assignee FROM tasks WHERE id IN (%s)" % q, tuple(chunk)))
+        return out
+
+    def ledger_for_runs(self, run_ids: list[str]) -> list[dict]:
+        out: list[dict] = []
+        for i in range(0, len(run_ids), 400):
+            chunk = [str(x) for x in run_ids[i:i + 400] if x]
+            if not chunk:
+                continue
+            q = ",".join("?" * len(chunk))
+            out.extend(self._rows("SELECT * FROM token_ledger WHERE run_id IN (%s)" % q, tuple(chunk)))
+        return out
 
     def runs_ended_by_task(self) -> dict[str, str]:
         """{task_id: 最后一次运行的 ended}（全员空闲的起点：最后一张卡结束的时间；也用它判断「有没有真跑过」）。"""
@@ -243,6 +322,23 @@ class Store:
         if mark and rows:
             self._exec("UPDATE messages SET read_at=? WHERE receiver=? AND read_at IS NULL", (now_iso(), receiver))
         return rows
+
+    def unread_messages(self, receiver: str, since: str | None = None) -> list[dict]:
+        """还没读的留言。since 给了就只要这个时间之后的（这一轮开工之后才算这一轮的）。"""
+        if since:
+            return self._rows("SELECT * FROM messages WHERE receiver=? AND read_at IS NULL AND at>=? ORDER BY id",
+                              (receiver, since))
+        return self._rows("SELECT * FROM messages WHERE receiver=? AND read_at IS NULL ORDER BY id", (receiver,))
+
+    def mark_messages_read(self, ids) -> None:
+        ids = [int(i) for i in (ids or [])]
+        if not ids:
+            return
+        q = ",".join("?" * len(ids))
+        self._exec("UPDATE messages SET read_at=? WHERE id IN (%s) AND read_at IS NULL" % q, [now_iso(), *ids])
+
+    def events_by_kind(self, task_id: str, kind: str) -> list[dict]:
+        return self._rows("SELECT * FROM events WHERE task_id=? AND kind=? ORDER BY id", (task_id, kind))
 
     def kv_get(self, k: str, default=None):
         r = self._row("SELECT json FROM kv WHERE k=?", (k,))

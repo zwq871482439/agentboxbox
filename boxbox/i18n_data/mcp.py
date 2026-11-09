@@ -30,17 +30,29 @@ ZH = {
     "mcp.review": "验收一张卡：accept 通过并完成；return 打回并自动重派下一轮（note 写进 returned_reason）。"
                   "只有派这张卡的工位能调。可选 feedback：给这只猫以后每张卡都要守的一条约束（≤120 字，"
                   "写哪里偏了 + 下次怎么做）；用户在设置里打开了才会记。",
-    "mcp.resolve": "处置没开工 / 失败 / 中断 / 卡住的卡：redispatch 原卡原工位再派一次（重新走开工检查和送达回执），"
-                   "cancel 撤掉这张卡（进 cancelled，不再出现在待办）。只有派这张卡的工位能调。",
+    "mcp.resolve": "处置没开工 / 失败 / 中断 / 卡住 / 打回待定的卡：redispatch 原卡原工位再派一次（重新走开工检查和送达回执），"
+                   "cancel 撤掉这张卡（进 cancelled，不再出现在待办）。只有派这张卡的工位能调。"
+                   "redispatch 可以再带 station，改派给另一只猫，卡号不变。",
+    "mcp.resolve.station": "改派给哪只猫（不填就还是原来那只）。卡号不变",
     "mcp.report": "打工猫上报：heartbeat / done / blocked / issue，附一句 summary。同一轮同状态只记一次。",
     "mcp.post": "给另一个工位的本机收件箱留一句话。",
     "mcp.read_inbox": "读自己收件箱里的未读留言并标已读。",
     "mcp.wait_for_update": "挂着等猫猫交回卡：等交回待验收 / 失败 / 打回 / 卡住 / 留言，一有动静就立刻返回。"
-                           "timeout_s 是最多等多少秒（默认 45，最多 120，最少 1）。等到了返回 code=update 和 events"
-                           "（每条一行）；到点还没动静返回 code=none。",
+                           "timeout_s 是最多等多少秒（默认 45，最多 100，最少 1）。"
+                           "上限 100 是按 Cursor 的请求时限留的余量：Cursor 大约 115 秒就自己报超时，"
+                           "等满了就拿不到 code=none。超过 100 的按 100 等，回话里的 note 说一句，不当成出错。"
+                           "等到了返回 code=update 和 events（每条一行）；到点还没动静返回 code=none。"
+                           "这些事件要等回话真的送出去才算读过，没送到的下次还会再给。",
     "mcp.instructions": "先调 get_briefing。工位：{sid}（{role}）。",
     "mcp.no_station": "连接设置里没写工位（URL 要带 ?station=工位名）。到「工位」页点首领工牌上的「叫醒首领」重新复制那段话。",
     "mcp.core_unreachable": "boxbox 核心不可达：{err}（先打开猫猫盒子 agentboxbox）",
+    "mcp.bad_args_type": "{tool} 的参数得是一组字段，不能是别的样子。",
+    "mcp.no_fields": "（无）",
+    "mcp.unknown_fields": "不认识这些字段：{unknown}。{tool} 能收的字段：{fields}。",
+    "mcp.note_named": "说明字段叫 note。",
+    "mcp.return_needs_note": "打回必须写说明，说明字段叫 note，空着的打回不收。",
+    "mcp.assign.station.one": "{sid}（模型 {model}）",
+    "mcp.assign.station.models": "。可选：{cats}",
 }
 
 EN = {
@@ -80,20 +92,35 @@ EN = {
                   "automatically (the note goes into returned_reason). Only the station that dispatched the card may call "
                   "it. Optional feedback: one rule this cat has to keep for every later card (≤120 characters: what went "
                   "wrong and what to do next); it is only kept when the user turned it on in Settings.",
-    "mcp.resolve": "Deal with the cards that never started / failed / were interrupted / are stuck: redispatch sends the "
+    "mcp.resolve": "Deal with the cards that never started / failed / were interrupted / are stuck / were sent back "
+                   "and are waiting: redispatch sends the "
                    "same card to the same station again (the start checks and the delivery receipt run again), cancel drops "
                    "the card (it becomes cancelled and leaves the to-do). Only the station that dispatched the card may "
-                   "call it.",
+                   "call it. redispatch may also include station, to give the same card to another cat; "
+                   "the card number stays the same.",
+    "mcp.resolve.station": "Which cat to move the card to (leave it out to keep the same one). The card number stays the same",
     "mcp.report": "The worker cat reports: heartbeat / done / blocked / issue, with a one-line summary. The same status in "
                   "the same round is only recorded once.",
     "mcp.post": "Leave a note in another station's local inbox.",
     "mcp.read_inbox": "Read the unread notes in your own inbox and mark them read.",
     "mcp.wait_for_update": "Wait for the cats to hand a card back: it returns as soon as a card comes back for review / "
-                           "fails / is sent back / is stuck / a note arrives. timeout_s is how long to wait at most (45 by "
-                           "default, 120 at most, 1 at least). When something comes back it returns code=update and events "
-                           "(one per line); when nothing happens it returns code=none.",
+                           "fails / is sent back / is stuck / a note arrives. timeout_s is how long to wait at most "
+                           "(45 by default, 100 at most, 1 at least). The cap of 100 leaves room for Cursor: "
+                           "Cursor times the request out at about 115 seconds, so a full wait would come back as a "
+                           "timeout instead of code=none. A number over 100 is waited as 100, and the reply's note says so; "
+                           "that is not an error. When something comes back it returns code=update and events "
+                           "(one per line); when nothing happens it returns code=none. "
+                           "Those events count as read only after the reply is actually sent; "
+                           "a reply that never goes out is given again next time.",
     "mcp.instructions": "Call get_briefing first. Station: {sid} ({role}).",
     "mcp.no_station": "The connection has no station (the URL needs ?station=name). On the Stations page, click "
                        "“Wake the leader” on the leader's badge and copy the text again.",
     "mcp.core_unreachable": "agentboxbox isn't running ({err}); open it first",
+    "mcp.bad_args_type": "{tool} arguments have to be a set of fields.",
+    "mcp.no_fields": "(none)",
+    "mcp.unknown_fields": "Unknown fields: {unknown}. Fields {tool} accepts: {fields}.",
+    "mcp.note_named": " The explanation field is called note.",
+    "mcp.return_needs_note": "A return needs a note. The explanation field is called note, and an empty one is refused.",
+    "mcp.assign.station.one": "{sid} (model {model})",
+    "mcp.assign.station.models": ". Choices: {cats}",
 }

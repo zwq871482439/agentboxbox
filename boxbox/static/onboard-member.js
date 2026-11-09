@@ -64,7 +64,7 @@
       'The box starts the worker by itself (with Pi) and work begins as soon as there is some. ' +
         'Fill in the provider, the key and the model below.'
     ],
-    'access.modeSched': ['会话模式', 'Session mode'],
+    'access.modeSched': ['会话模式', 'Check-in mode'],
     'access.modeSchedDesc': [
       '你的 AI 软件每隔几分钟开一个新对话来领卡，不分是哪个软件，也不用 API key。',
       'Your AI app opens a new chat every few minutes to pick up cards — whichever app it is, ' +
@@ -89,7 +89,7 @@
     'access.readyMsg': [
       '先测一下：Pi 点「测试连接」，会话模式点「测试」，测通了才算接好',
       'Test first: click “Test connection” for Pi, ' +
-        'or “Test” for session mode — only then it counts as connected'
+        'or “Test” for check-in mode — only then it counts as connected'
     ],
     'access.registerFail': ['登记失败：{why}', 'Could not register: {why}'],
     'access.saveFail': ['保存失败：{why}', 'Could not save: {why}'],
@@ -105,7 +105,7 @@
     'access.schedPath': ['任务单文件路径', 'Job list file path'],
     'access.schedPrompt': ['贴进定时任务的那段话', 'Text for the scheduled task'],
     'access.schedTesting': ['正在登记工位并检查…', 'Registering the station and checking…'],
-    'access.schedTitle': ['会话模式', 'Session mode'],
+    'access.schedTitle': ['会话模式', 'Check-in mode'],
     'access.schedWait': [
       '还没来过（{state}）。照说明在客户端里建好定时任务，等它第一次跑完（它每次来都会留个记号），这只猫才算接上；再点一次「测试」就能看到「来过了」。',
       'Not here yet ({state}). ' +
@@ -128,7 +128,7 @@
       '首领只派活、不自己干：派出去的卡要打工猫来干，所以至少要招一只才能派卡。手上没有 API key 也行，下一步还有「会话模式」这种接法。',
       'The leader only hands out work, it does not do it itself: a card needs a worker cat, ' +
         'so hire at least one before you can hand out work. ' +
-        'No API key yet? That is fine — the next step has a “session mode” option too.'
+        'No API key yet? That is fine — the next step has a “check-in mode” option too.'
     ],
     'recruit.acc': ['换一套配饰', 'Shuffle the extras'],
     'recruit.defaultWorker': ['打工猫猫', 'Worker'],

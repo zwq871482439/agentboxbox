@@ -6,7 +6,7 @@
 
 It's for someone who already pays for one strong agent (Cursor, Claude Code or Codex) and wants it to act as the leader, delegating cards to cheaper helper models on the same project. Everything runs on your own machine with no account and no server; nothing leaves it except the requests a worker sends to the model provider you picked for it (see [PRIVACY.en.md](PRIVACY.en.md)). agentboxbox never changes the settings of your AI software.
 
-Current state: 0.4 is the second pre-release. The exe is Windows-only; the pages, the texts for your AI app and the office all speak Chinese and English. The language follows your system on first launch and you can switch it in the welcome window or in Settings. Worker cats have two ways to take work: running on an API key, or session mode (your AI app checks in on a timer).
+Current state: 0.5.0 is the current release. The exe is Windows-only; the pages, the texts for your AI app and the office all speak Chinese and English. The language follows your system on first launch and you can switch it in the welcome window or in Settings. Worker cats have two ways to take work: running on an API key, or check-in mode (your AI app checks in on a timer).
 
 ## What it does
 
@@ -20,18 +20,22 @@ Worker cats have two ways to take work (each station picks one):
 | Way | How work arrives | Who it's for |
 |---|---|---|
 | Run it with an API key | One Pi process per card (provider, model, key); it exits when the card is done | Anyone with a pay-per-use API key |
-| Session mode | Your AI app opens a new chat every few minutes to pick up a card from a file the box writes; no key, any app | People who work in an AI app |
+| Check-in mode | Your AI app opens a new chat every few minutes to pick up a card from a file the box writes; no key, any app | People who work in an AI app |
 
-The leader has exactly one home: a chat in the AI software you already use. The box talks to it through that software's tool interface (the address is in the paragraph you paste during onboarding). The box does not keep a leader of its own, and there is no "talk to the leader" entry: the leader always lives in your app. There is exactly one leader: registering another one replaces the old one (its station is removed), so you never end up with two.
+The leader has exactly one home: a chat in the AI software you already use. The box talks to it through that software's tool interface (the address is in the paragraph you paste during onboarding). The box does not keep a leader of its own, and there is no "talk to the leader" entry: the leader always lives in your app. You can have several leaders: when two projects each have their own chat acting as leader, click "Add another leader" on the Stations page and give the new address to one of the chats. Each leader only sees and reviews the cards it dispatched; the cats are shared. If two chats are connected to the same leader, the box says so in its replies and on the Stations page.
 
 ## Installing
 
 - **Requirements**: Windows 10 / 11, 64-bit. With the exe you don't need Python or Node — both are packed inside.
-- **With the exe**: download `agentboxbox_<version>.exe` from https://github.com/zwq871482439/agentboxbox/releases (the release repo gets tagged, then the pipeline builds the exe, hashes it and attaches the release notes). Make a fresh folder for it, put the exe there and double-click. Two folders appear next to the exe: `data\` holds configuration and records (stations, keys, tasks, logs) — **don't delete it casually**; `tmp\` holds throw-away scratch from work in progress — **safe to delete any time no card is running** (Settings has a one-click clean too). Don't drop the exe into a crowded desktop or your downloads folder.
+- **With the exe**: download `agentboxbox_<version>.exe` from https://github.com/zwq871482439/agentboxbox/releases (the release repo gets tagged, then the pipeline builds the exe, hashes it and attaches the release notes). Make a fresh folder for it, put the exe there and double-click. Two folders appear next to the exe: `data\` holds configuration and records (stations, keys, tasks, logs) — **don't delete it casually**; `tmp\` holds throw-away scratch from work in progress, cleared automatically when a card is done or cancelled — **safe to delete any time no card is running** (Settings has a one-click clean too). In `data\`, the run records of finished cards are compressed after a few days and deleted later; the number of days is under Advanced in Settings. Don't drop the exe into a crowded desktop or your downloads folder.
 - **First launch**: pixel windows pop up over the office on the home page and walk you through hiring; a cat icon appears in the tray. The window's × only minimizes to the tray; to quit, right-click the tray cat and choose "Exit". Tick "Start with Windows" in the tray menu if you want it on login.
-- **Upgrading**: quit the old version, drop the new exe into the same folder (keep `data\` — configuration and records survive), delete the old exe.
 - **Uninstalling**: quit from the tray, then delete the folder. If you ever ticked "Start with Windows", untick it first (otherwise a shortcut stays in the Windows Startup folder). Windows keeps one registry entry for the tray icon's appearance; harmless. agentboxbox writes nothing into other software, so deleting the folder removes it all.
 - **From source (developers)**: Python 3.11+, then `python -m boxbox serve` at the repo root and open `http://127.0.0.1:8878`.
+
+### Upgrading
+
+- **Simplest**: quit the old version from the tray, put the new exe in that same folder, and double-click. `data\` stays, so the cats, the settings and the cards are still there. Delete the old exe when you are done.
+- **A new folder**: quit the old version from the tray first, open the new one, then use "Import from an old version" under Data and privacy in Settings. Give it the old folder, or the `data\` folder inside it. Do not copy `data\` while the old version is still open: cards assigned, handed back or accepted after that copy do not come along.
 
 ## Onboarding
 
@@ -40,7 +44,7 @@ On first launch, pixel windows pop up over the office and walk you through it in
 1. **Welcome**: one line about what this is.
 2. **Hire a leader**: pick a name and a look.
 3. **Copy a paragraph into a new chat of your usual AI software** (Cursor, Claude Code, Codex, …): it's written for the AI, so paste it whole. The AI becomes your leader: it calls get_briefing for its manual, then reaches the box at the address in that paragraph and starts working. Once connected it may ask whether to add the box to its tool list — your call; **agentboxbox never touches the settings of any software on your machine**.
-4. **Hire a worker cat**: name and look, then one way to get work — "run it with an API key" (provider, model, key; "Test connection" really asks the provider once) or "session mode" (no key needed). A failed test doesn't block hiring: the cat joins anyway, its cards queue, and work starts as soon as the endpoint answers.
+4. **Hire a worker cat**: name and look, then one way to get work — "run it with an API key" (provider, model, key; "Test connection" really asks the provider once) or "check-in mode" (no key needed). A failed test doesn't block hiring: the cat joins anyway, its cards queue, and work starts as soon as the endpoint answers.
 5. **Assign your first card**: the last window hands you a copy-paste example ("Make me a card: …"). Send it in the leader's chat, or just tell the leader what you want and it will write the card.
 
 The pages, the texts for your AI app and the office scene all follow the interface language. The language is decided on first launch from your system; a small "Chinese / English" switch in the welcome window changes it right away, and Settings has it later on.
@@ -111,13 +115,13 @@ If a core is already listening on the port, `tray` (and double-clicking the exe)
 
 | Concept | Meaning |
 |---|---|
-| Station | One seat: its name + how it takes work (run it with an API key / session mode) |
+| Station | One seat: its name + how it takes work (run it with an API key / check-in mode) |
 | Leader | The main-model station: writes cards, assigns (assign), reviews (review). Exactly one; registering another one replaces the old one |
 | Worker cat | A helper-model station: takes cards, does the work, reports (report). No assigning rights |
 | Task card | The only unit of dispatch, **self-contained** (a fresh chat has no old context): `goal` / `inputs` / `expected_output{kind,path}` / `acceptance{review}` are all required; assign rejects the card without them |
 | Checks | Mechanical checks run on every delivery first (exists / headings / command / commits / json / size); free; any failure returns the card without bothering the leader. The card field is still `acceptance.gates` |
 | Review | Whoever assigns, reviews: after the checks pass, the dispatcher decides (or leaves it to the user, or "checks passing is enough") |
-| Way of taking work | How a cat takes work: `once` (one Pi process per card) / `scheduled` (session mode: reads the exchange file); the leader is `manual` |
+| Way of taking work | How a cat takes work: `once` (one Pi process per card) / `scheduled` (check-in mode: reads the exchange file); the leader is `manual` |
 | Language | The interface language lives in the setting `ui_lang` (zh / en) and falls back to the system language when it is not set; the page word lists are in `boxbox/static/i18n-*.js`, the backend ones in `boxbox/i18n_data/` |
 
 ### Pages and endpoints
@@ -125,9 +129,9 @@ If a core is already listening on the port, `tray` (and double-clicking the exe)
 Pages (all under `http://127.0.0.1:8878`):
 
 - `/` home (the office scene): top bar + full-screen office; day/night switch, Activity and Usage buttons and the party arcade live inside the scene; click a cat for details; **onboarding happens here, window by window**
-- `/board` board: stations, task cards, usage
-- `/stations` stations: badge cards (leader + A–F); click one for its drawer; copy, delete and change settings on the badge
-- `/settings` settings: box settings, data & privacy, temp-file cleanup, reset everything
+- `/board` board: stations (with model, quota and when a resting cat is back), to-do, task cards, usage, efficiency (time and usage per card and per cat)
+- `/stations` stations: badge cards (leader + A–F); click one for its drawer; copy, delete and change settings on the badge; "Add another leader"
+- `/settings` settings: box settings, data & privacy (temp files, how big the data folder is, import from an old version), advanced (stuck alerts, how run records are kept), reset everything
 - `/doctor` self-check: per-item results, what to do, copy the diagnostics
 - `/office` the office scene on its own (the home page embeds this one)
 - `/onboard` old address; just redirects home
@@ -152,6 +156,9 @@ Endpoints (GET is read-only; writes accept same-origin local requests only; `/mc
 - `/api/reset` (POST) reset everything: stations, settings, keys, task records and logs; keeps `data/work`; needs `force` while cards run
 - `/api/shutdown` (POST) the core shuts itself down: same path as tray "Exit" (stops running workers, closes the database)
 - `/api/tmp` how much the temp files take (`/api/tmp/clean` POST cleans)
+- `/api/data` how big the data folder is and how much of it is run records (`/api/data/clean` POST compresses finished cards' records now)
+- `/api/efficiency` efficiency: time, turns and usage per card and per cat over the last days (`?days=7`)
+- `/api/import_old` (POST) import from an old version: only after the old version has quit, and only while this box has no cards
 - `/api/connectors` supported clients; `/api/connectors/snippet` a paste-able connection snippet for one station
 - `/api/summon/<station>` "wake the leader": the paragraph to paste, where, and the steps, per way of taking work
 - `/api/office` data for the office scene
@@ -162,7 +169,7 @@ Endpoints (GET is read-only; writes accept same-origin local requests only; `/mc
 ```
 boxbox/      the core (app / store / dispatcher / watchdog / tokens / gates / office_feed / scenes)
              facades/ (mcp_stdio · cli · http — thin, stateless)
-             runners/ (base · pi: run it with an API key · scheduled: session mode reading the exchange file)
+             runners/ (base · pi: run it with an API key · scheduled: check-in mode reading the exchange file)
              i18n_data/ (backend word lists, Chinese and English)
              static/  (home · board · stations · onboarding · settings · self-check, plus the i18n-*.js word lists)
              templates/ (the leader's and the worker cat's manuals, each in Chinese and English)
@@ -178,9 +185,9 @@ tmp/         temp files: one folder per card, auto-cleaned (gitignored; next to 
 
 ## Known limitations
 
-- Session mode: every check-in starts with no context; if the timer on your side never fires, the core can only nudge you.
+- Check-in mode: every check-in starts with no context; if the timer on your side never fires, the core can only nudge you.
 - A Cursor IDE leader can't be woken from outside — tray dot plus a "wake the leader" hint; IDE chats and CLI chats don't share state.
-- Usage is measured only: session-mode cats and a Cursor IDE leader aren't counted; "how much you saved" isn't shown yet.
+- Usage is measured only: check-in-mode cats and a Cursor IDE leader aren't counted; "how much you saved" isn't shown yet.
 
 A few more facts:
 

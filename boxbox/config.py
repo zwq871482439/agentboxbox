@@ -15,7 +15,7 @@ FROZEN = bool(getattr(sys, "frozen", False))                                   #
 BUNDLE = pathlib.Path(getattr(sys, "_MEIPASS", "")) if FROZEN else pathlib.Path(__file__).resolve().parent.parent
 ROOT = pathlib.Path(sys.executable).resolve().parent if FROZEN else BUNDLE     # data/ lives next to the exe
 DATA = pathlib.Path(os.environ.get("BOXBOX_DATA") or ROOT / "data")
-# 临时文件统一放程序目录 tmp\：每张卡一个子目录。没有卡在跑时随时能删（data\ 不能随便删）。
+# 临时文件统一放程序目录 tmp\：每张卡一个子目录。完成或撤掉马上清，失败或中断留几天（data\ 不能随便删）。
 TMP = pathlib.Path(os.environ.get("BOXBOX_TMP") or ROOT / "tmp")
 TASK_ID_RE = r"^\d{8}-\d{3}$"
 
@@ -42,8 +42,18 @@ SETTINGS_DEFAULTS = {
     "onboard": {},              # 上岗进度（§5）：{"step": 步骤名, "played": [播过的动画], "draft": 填到一半的表单}
     "member_feedback": False,   # 首领验收时给的一句约束记进打工猫的说明（默认关）
     "member_feedback_max_chars": 800,   # 那段说明最多多少字，超了挤掉最旧的
-    "tmp_keep_days": 1,        # 临时文件（tmp\ 里每张卡一个子目录）留几天就清掉；在跑的卡不动
+    "tmp_keep_days": 1,        # 失败或中断的临时目录留几天；完成和撤掉的马上清，在跑的不动
+    # 运行记录（data/tasks/<卡号>/run-N.log），见 boxbox/runlog.py
+    "log_full": False,         # 原样记（逐字的模型输出、长命令每次的全部输出）。排查问题时打开，很占地方
+    "log_tool_tail_chars": 2000,   # 命令还在跑：每 30 秒记一次，只留最后这么多字；0 = 只记跑完的结果
+    "log_gzip_days": 3,        # 结束的卡（完成 / 撤掉 / 失败）记录过几天压成 .gz；0 = 下一次整理就压
+    "log_keep_days": 30,       # 结束的卡记录过几天删掉（卡片、回报留着）；0 = 一直留
     "tray_notify": True,       # 托盘模式下卡交回 / 出问题时弹系统通知（首领闲着，靠这个叫用户去说话）
+    # 卡住提醒和单条命令的硬上限，单位秒。设置页「高级」按分钟显示。不看命令内容。
+    "stall_cmd_s": 600,        # 一条命令这么久没有新输出 → 待办报可能卡住
+    "stall_model_s": 600,      # 模型这么久没有任何新输出 → 待办报可能卡住
+    "stall_notool_s": 900,     # 模型还在说话，但这么久没有调用工具 → 待办报可能卡住
+    "cmd_hard_s": 1800,        # 一条命令跑到这么久还没结束 → 停掉这次运行，卡记失败
     "ui_lang": "",             # 界面语言：zh / en；空 = 没选过，核心第一次启动按系统语言定下来
 }
 
@@ -240,10 +250,24 @@ def station(sid: str) -> dict | None:
 
 
 def leader_id() -> str | None:
+    """主首领：stations.json 里第一个 role=leader。办公室和上岗只画这一只。"""
     for s in stations():
         if s.get("role") == "leader":
             return s["id"]
     return None
+
+
+def leader_ids() -> list[str]:
+    """启用中的首领，按登记顺序。可以有多个。"""
+    return [s["id"] for s in stations()
+            if s.get("role") == "leader" and s.get("enabled", True) and s.get("id")]
+
+
+def is_leader(sid: str | None) -> bool:
+    if not sid:
+        return False
+    st = station(sid)
+    return bool(st and st.get("role") == "leader")
 
 
 def ensure_dirs() -> None:

@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from . import i18n
+from . import i18n, run_timing
 
 # /home/runner —— bash 掉进 WSL 时读到的 home，不是真用户的家目录
 RE_HOME_RUNNER = re.compile(r"/home/runner\b", re.I)
@@ -111,6 +111,7 @@ class PiEventParser:
 
     def __init__(self, lang: str | None = None):
         self.run = PiRun()
+        self.timing = run_timing.Accum()
         self._buf = ""
         self.lang = lang or i18n.lang()
 
@@ -189,7 +190,8 @@ class PiEventParser:
                 "errors": list(r.errors),
                 "retried_errors": list(r.retried_errors),
                 "retry_failed": r.retry_failed,
-                "final_text": (r.final_text or "")[:_MAX_FINAL]}
+                "final_text": (r.final_text or "")[:_MAX_FINAL],
+                "split": self.timing.snapshot()}
 
     # ---------- 事件处理 ----------
 
@@ -262,8 +264,10 @@ class PiEventParser:
             summary = re.sub(r"\s+", " ", f"{name}: {args_text}").strip()
             r.last_tool = summary[:_MAX_TOOL]
             self._note_stale(args_text)
+        self.timing.assistant(msg)
 
     def _tool_result(self, msg: dict) -> None:
+        self.timing.tool_result(msg)
         self._note_stale(_text_of(msg.get("content")))
 
     def _note_stale(self, text: str) -> None:

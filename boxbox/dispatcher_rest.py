@@ -5,7 +5,15 @@ import datetime as _dt
 import re
 
 from . import classify, config, i18n, pi_config
-from .dispatcher_const import REST_BACKOFF, REST_KV, REST_REASONS, REST_TRY_KV, WAIT_NETWORK, WAIT_REST
+from .dispatcher_const import (
+    CONFIG_KV,
+    REST_BACKOFF,
+    REST_KV,
+    REST_REASONS,
+    REST_TRY_KV,
+    WAIT_NETWORK,
+    WAIT_REST,
+)
 from .store import now_iso
 
 
@@ -182,3 +190,48 @@ class RestMixin:
         """歇着的卡排队标记：接口连不上那种等 探测（network），别的等它回来（rest）。"""
         rest = self.rest_of(sid) or {}
         return WAIT_NETWORK if rest.get("reason") == "network" else WAIT_REST
+    def config_bads(self) -> dict:
+        """配置有问题的工位：{工位: {why, since}}。模型 id 或密钥错了不会自己好，保存配置才清。"""
+        return self.store.kv_get(CONFIG_KV) or {}
+    def config_of(self, sid: str) -> dict | None:
+        return (self.config_bads() or {}).get(sid)
+    @staticmethod
+    def config_quote(err: str) -> str:
+        """给用户看的服务商原话：去掉密钥，压成一行，只留前 200 字。"""
+        text = classify.mask(str(err or "")).replace("\r", " ").replace("\n", " ").strip()
+        return text[:200]
+    def mark_config_bad(self, sid: str, err: str) -> dict:
+        """记一笔「配置有问题」。不写回来时刻：到点也不会自己变回闲。"""
+        why = self.config_quote(err)
+        with self.lock:
+            data = dict(self.config_bads())
+            old = data.get(sid) or {}
+            entry = {"why": why, "since": old.get("since") or now_iso()}
+            data[sid] = entry
+            self.store.kv_set(CONFIG_KV, data)
+        return entry
+    def clear_config_bad(self, sid: str) -> bool:
+        with self.lock:
+            data = dict(self.config_bads())
+            if sid not in data:
+                return False
+            data.pop(sid, None)
+            self.store.kv_set(CONFIG_KV, data)
+        return True
+    def release_config_bad(self, sid: str) -> bool:
+        """配置保存过了：清掉标记。下一张卡用刚保存的那份，排队的卡接着开工。"""
+        if not self.clear_config_bad(sid):
+            return False
+        st = self.station(sid)
+        runner = self.runners.get(sid)
+        if runner is not None and st is not None and hasattr(runner, "reconfigure"):
+            runner.reconfigure(st)
+        self.store.event("config_ok", i18n.t("ev.config_ok", self.lang(), sid=sid), sid)
+        self.start_ready_queued()
+        return True
+    def _config_failure(self, res) -> bool:
+        """这次失败是不是配置错了：退出码 13，或报错文字归成 auth（密钥不对 / 模型 id 不存在）。"""
+        if int(getattr(res, "exit", 0) or 0) == classify.EXIT_CODES["auth"]:
+            return True
+        text = "%s\n%s" % (getattr(res, "error", "") or "", getattr(res, "iface_error", "") or "")
+        return classify.classify(text) == "auth"

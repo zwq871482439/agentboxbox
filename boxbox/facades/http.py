@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import mimetypes
 import pathlib
+import secrets
+import sys
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,6 +62,13 @@ PAGES = {"/": "home.html", "/board": "index.html", "/onboard": "onboard.html", "
 PORT_REBIND_TRIES = 20          # 撞上禁用端口最多重绑几次
 
 
+def _fresh_session(msgs) -> str:
+    """initialize 才发会话号：客户端之后每次请求带回来。不带也照常工作，所以别的请求不发。"""
+    if any(isinstance(m, dict) and m.get("method") == "initialize" for m in msgs):
+        return secrets.token_hex(8)
+    return ""
+
+
 def _req_lang(q: dict) -> str:
     """页面上问的语言（?lang=en）：这一次回话就按它来，不用等设置里的语言改过来。"""
     return str((q.get("lang") or [""])[0]).strip().lower()
@@ -71,36 +80,71 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # quiet; the core has its own event log
         pass
-    def _json(self, obj, code=200, lang=True):
+
+    def handle_one_request(self):
+        """写进套接字成功之后才把这次带回的事件记成读过。flush 失败（对端已断开）就放回去。"""
+        from .http_leader import release_delivery
+        try:
+            super().handle_one_request()
+        except OSError:
+            release_delivery(None, False)
+            raise
+        core = getattr(self, "core", None)
+        store = core.d.store if core is not None else None
+        release_delivery(store, True)
+
+    def _json(self, obj, code=200, lang=True, headers=None):
+        from .http_leader import release_delivery
         if lang and isinstance(obj, dict):
             obj = dict(obj, lang=i18n.lang())      # 回话里带上当前语言，客户端知道盒子现在说什么语言
         body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            for key, val in (headers or {}).items():
+                if val:
+                    self.send_header(key, val)
+            self.end_headers()
+            self.wfile.write(body)
+            self.wfile.flush()
+        except OSError:
+            # 客户端已经断开：这回话没送到，事件放回去，下次调用再给
+            release_delivery(None, False)
+            raise
+        # 记成读过要等 handle_one_request 里基类那次 flush 也回来：这里先不落库
     def _mcp(self, body, station: str):
         """MCP Streamable HTTP（只用到「POST 一条或一批 JSON-RPC、直接回 JSON」那一半，不开 SSE 流）。
         工位从 URL 的 ?station= 来；角色 / 运行器现查 stations.json，所以改了角色不用重写客户端条目。"""
         from . import mcp_stdio
         st = config.station(station) if station else None
         role = (st or {}).get("role", "member")
+        # 只用来分出「是不是两个对话」。不认人、不存盘。没带头、号不认识（包括核心重启前的老号）也照常收。
+        session = (self.headers.get("Mcp-Session-Id") or "").strip()
 
         def call(name, args):
-            return self.core.call(name, station, args, transport=self._link(station))
+            from .http_leader import begin_delivery
+            begin_delivery()          # 事件先别算读过，等下面把字节写进连接
+            return self.core.call(name, station, args, transport=self._link(station), session=session)
 
         msgs = body if isinstance(body, list) else [body]
         self._note_link(station, msgs)
         lg = self.core.d.lang_of(station)
         outs = [r for r in (mcp_stdio.handle(m, station, role, call, lg) for m in msgs if isinstance(m, dict)) if r is not None]
+        fresh = _fresh_session(msgs)
         if not outs:                                       # 全是通知 / 回复：202、没有正文
             self.send_response(202)
             self.send_header("Content-Length", "0")
+            if fresh:
+                self.send_header("Mcp-Session-Id", fresh)
             self.end_headers()
             return None
-        return self._json(outs if isinstance(body, list) else outs[0], lang=False)
+        payload = outs if isinstance(body, list) else outs[0]
+        # 只有 initialize 才多这个头。别的请求沿用原来的参数，免得多出来的关键字把调用打断。
+        if fresh:
+            return self._json(payload, lang=False, headers={"Mcp-Session-Id": fresh})
+        return self._json(payload, lang=False)
     def _link(self, station: str) -> str:
         """/这个工位是怎么连上来的："mcp" = 客户端发过 initialize（连接设置生效）；"http" = 那段话里的 HTTP 兜底。"""
         inited = self.core.d.__dict__.setdefault("mcp_inited", set())
@@ -161,6 +205,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", "bx-lang=%s; Path=/; SameSite=Lax" % i18n.lang())
         self.end_headers()
         self.wfile.write(data)
+
+    def do_DELETE(self):
+        """拿到会话号的客户端退出时会发 DELETE 结束会话。盒子不记会话，回 405（规范允许，客户端当成正常）；
+        不写这个方法基类会回 501，客户端每次退出都报一条错。"""
+        u = urllib.parse.urlparse(self.path)
+        self.send_response(405 if u.path == "/mcp" else 404)
+        if u.path == "/mcp":
+            self.send_header("Allow", "POST")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     @staticmethod
     def _safe_under(root: pathlib.Path, rel: str) -> pathlib.Path | None:
@@ -252,6 +306,13 @@ class Handler(BaseHTTPRequestHandler):
 class _Server(ThreadingHTTPServer):
     allow_reuse_address = False   # Windows: SO_REUSEADDR lets a second core bind the same port silently -> refuse instead
     request_queue_size = 64       # 默认 5 太窄：页面一开就并发发十几个请求（设置页 / 办公室轮询），
+
+    def handle_error(self, request, client_address):
+        # 对方先断开了（关页面、取消请求、AI 软件探一下推送流就走）：不是盒子出错，别往 tray.log 里倒整段报错。
+        # 实测一开 Cursor，十几分钟就倒了两千多行
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
 def _open(handler, port: int) -> ThreadingHTTPServer:
     """开服务器。port=0（让系统随便挑一个）时躲开浏览器禁用端口：挑中 1719、6665 这种就关掉重绑。
 

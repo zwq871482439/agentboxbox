@@ -293,7 +293,7 @@ class TestMissingFields(unittest.TestCase):
 
 
 class TestQuota(unittest.TestCase):
-    """猫头顶的余量血条：数据从查余量的结果来（core 里 kv 的 quota:<工位>）。"""
+    """猫头顶的余量血条：数据从查余量的结果来（同一份额度一份）。"""
 
     def build(self, quotas=None, defs=None, lang="zh"):
         defs = defs if defs is not None else [{"id": "A", "quota": {"mode": "interval"}}]

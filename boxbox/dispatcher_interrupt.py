@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import json
-import pathlib
 import re
 
-from . import config, i18n, pi_events, procjob, tasks
+from . import config, i18n, pi_events, procjob, runlog, tasks
 from .dispatcher_const import (
     ASKED_KV,
     INT_CRASH,
@@ -26,11 +25,11 @@ class InterruptMixin:
         """这一轮被打断了（不是做砸了）：run 收尾、卡记 interrupted、原因写清怎么来的。
         对话记录目录记在卡上（下次能接着做）；token 照常记在这一轮上。"""
         run = self.store.get_run(run_id)
-        if run is None:
+        if run is None or run.get("status") == "cancelled":
             return None
-        t = self.store.get_task(run["task_id"])
         self._close_run(run_id, res, task_failed=False)      # 先把这一轮收好（token / 用量）
         self._quota_after_run(run["station"])
+        t = self.store.get_task(run["task_id"])              # 撤掉可能刚发生，用库里的最新状态
         if t is None or t["state"] not in ("dispatched", "running"):
             return None
         card = dict(t.get("card") or {})
@@ -77,9 +76,8 @@ class InterruptMixin:
         从运行日志里这一轮的 pi --mode json 事件流把用量捞出来补记进账本；捞不到就算了，不报错。"""
         if self.store.ledger_has_run(run["run_id"]):
             return False                     # 记过了，别记两遍
-        try:
-            text = pathlib.Path(str(run.get("log_path") or "")).read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = runlog.read_text(str(run.get("log_path") or ""))   # 已经压成 .gz 的也读得到
+        if not text:
             return False
         stream = self._run_stream(text, str(run["run_id"]))
         if not stream:
@@ -87,10 +85,15 @@ class InterruptMixin:
         p = pi_events.PiEventParser()
         p.feed(stream)
         p.close()
-        tok = p.summary().get("tokens")
+        summ = p.summary()
+        tok = summ.get("tokens")
         if not tok or not tok.get("turns"):
             return False
-        self.store.update_run(run["run_id"], tokens_json=json.dumps(tok, ensure_ascii=False))
+        fields = {"tokens_json": json.dumps(tok, ensure_ascii=False)}
+        # 崩溃没走到 finish，模型/命令用时也从同一份日志补上，免得打开页面再扫一遍
+        if summ.get("split"):
+            fields["split_json"] = json.dumps(summ["split"], ensure_ascii=False)
+        self.store.update_run(run["run_id"], **fields)
         from . import tokens as _tok
         _tok.record(self.store, run, tok)
         return True
@@ -140,8 +143,16 @@ class InterruptMixin:
         ids = [str(i) for i in (ids or []) if i]
         self._mark_asked(ids)
         if to_leader and ids:
-            self.store.event("interrupted_handoff", i18n.t("ev.interrupted_handoff", self.lang(), n=len(ids)),
-                             config.leader_id(), data={"task_ids": ids, "n": len(ids)})
+            # 交给派这张卡的那个首领；几张卡不是同一个首领派的，就各发一条
+            groups: dict[str, list[str]] = {}
+            for i in ids:
+                t = self.store.get_task(i) or {}
+                lid = str(t.get("dispatcher") or "") or config.leader_id() or ""
+                if lid:
+                    groups.setdefault(lid, []).append(i)
+            for lid, mine in groups.items():
+                self.store.event("interrupted_handoff", i18n.t("ev.interrupted_handoff", self.lang(), n=len(mine)),
+                                 lid, data={"task_ids": mine, "n": len(mine)})
         return {"ok": True, "dismissed": len(ids), "to_leader": bool(to_leader)}
     def resume_interrupted(self, ids) -> dict:
         """「接着做」：把这几张中断的卡重新派出去，能续上次的对话就续（--continue），续不了就从头开始。"""
@@ -233,7 +244,7 @@ class InterruptMixin:
             self.store.update_task(t["id"], state="interrupted", returned_reason=why)
             self.store.event("interrupted", i18n.t("ev.interrupted_need", lg, sid=station_id, word=word, title=t["title"]),
                              station_id, t["id"], data={"reason": cause, "station": station_id})
-            lid = config.leader_id()
+            lid = str(t.get("dispatcher") or "") or config.leader_id()
             if lid and lid != station_id:
                 self.store.post_message(station_id, lid, i18n.t("ack.interrupted_msg", lg, sid=station_id, word=word,
                                                                 title=t["title"], tid=t["id"]))

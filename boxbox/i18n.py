@@ -26,8 +26,8 @@ def _modules():
     """各模块的词表模块：按模块分文件，加新的就在这个列表里加一行。"""
     global _MODULES
     if not _MODULES:
-        from .i18n_data import alerts, app, board, cards, cli, connectors, doctor, events, http, leader, mcp, office, quota, tray
-        _MODULES = (board, alerts, app, cards, cli, connectors, doctor, events, http, leader, mcp, office, quota, tray)
+        from .i18n_data import alerts, app, board, cards, cli, connectors, doctor, events, http, leader, mcp, office, quota, stall, tray
+        _MODULES = (board, alerts, app, cards, cli, connectors, doctor, events, http, leader, mcp, office, quota, stall, tray)
     return _MODULES
 
 

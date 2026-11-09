@@ -1,6 +1,6 @@
 [project]
 name = "agent-boxbox"
-version = "0.4.0"
+version = "0.5.0"
 description = "boxbox 核心：TeamLeader 经 MCP 派活给工位，质检 + 验收 + 实测 token。核心只用标准库。"
 requires-python = ">=3.11"
 

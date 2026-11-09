@@ -88,8 +88,18 @@ ZH = {
     "tool.no_task": "没有这张卡",
     "tool.own_card_only": "只能看自己的卡",
     "tool.no_receiver": "收件工位不存在",
-    "tool.posted": "已投递",
+    "tool.posted_running": "{sid} 在跑 {tid}，它干完时盒子会把这条交给它接着处理",
+    "tool.posted_next": "{sid} 现在没在跑卡，它下一张卡开工时会看到",
+    "tool.posted_inbox": "已记下。{sid} 下次来领卡时自己会读到",
     "tool.wait_none": "没新消息",
+    "api.err_name_taken": "已经有叫「{sid}」的工位，首领要另起一个名字",
+    "import.no_db": "这个文件夹里没有猫猫盒子的记录",
+    "import.same": "这就是现在这份记录，不用导入",
+    "import.running": "旧版还开着，先从托盘退出",
+    "import.unchecked": "查不到旧版是不是还开着，先从托盘退出再试一次",
+    "import.has_cards": "这台盒子已经有卡了，导入会盖掉。要导入先在设置里「重置所有」",
+    "import.failed": "导入没做成。先从托盘退出旧版，再试一次",
+    "import.done": "导入了 {cats} 只猫、{cards} 张卡",
 }
 
 EN = {
@@ -134,9 +144,9 @@ EN = {
     "api.err_name_empty": "The station needs a name",
     "api.err_role": "role can only be leader or member",
     "api.err_runner": "Unknown way of taking work: the leader is the chat you open in your AI app, "
-                      "a worker runs with an API key or in session mode",
+                      "a worker runs with an API key or in check-in mode",
     "api.err_runner_leader": "the leader can only be the chat you open in your AI app",
-    "api.err_runner_member": "a worker can only run with an API key, or in session mode "
+    "api.err_runner_member": "a worker can only run with an API key, or in check-in mode "
                              "(your AI app picks up cards for agentboxbox on a timer)",
     "api.err_quota_mode": "quota.mode can only be off / after_run / interval",
     "api.err_quota_adapter": "quota.adapter can only be {list}",
@@ -178,6 +188,17 @@ EN = {
     "tool.no_task": "There is no such card",
     "tool.own_card_only": "You can only look at your own cards",
     "tool.no_receiver": "The receiving station does not exist",
-    "tool.posted": "Delivered",
+    "tool.posted_running": "{sid} is working on {tid}. When it finishes, the box will hand this note over for it to keep going.",
+    "tool.posted_next": "{sid} is not on a card right now. It will see this when its next card starts.",
+    "tool.posted_inbox": "Noted. {sid} will read it the next time it picks up a card.",
     "tool.wait_none": "No new messages",
+    "api.err_name_taken": "A station named “{sid}” already exists. A leader needs its own name",
+    "import.no_db": "This folder has no agentboxbox records",
+    "import.same": "This is already the record this box is using",
+    "import.running": "The old version is still open. Quit it from the tray first",
+    "import.unchecked": "Could not tell whether the old version is still open. Quit it from the tray and try again",
+    "import.has_cards": "This box already has cards, and importing would replace them. "
+                        "To import, use Reset everything in Settings first",
+    "import.failed": "The import did not work. Quit the old version from the tray and try again",
+    "import.done": "Imported {cats} cats and {cards} cards",
 }

@@ -48,6 +48,9 @@ ZH = {
     "tray.stderr.already_open": "端口 {port} 上已经开着一个猫猫盒子：叫它把窗口弹出来，这个不再起。",
     "tray.stderr.other_core": "端口 {port} 上是别的版本的核心（{other}），问用户要不要结束它。",
     "tray.stderr.old_started": "旧版本已结束，起 {v} 的核心。",
+    "tray.notify.config": "{who} 的配置有问题",
+    "tray.notify.many_config": "有 {n} 只猫的配置有问题",
+    "tray.notify.tail_config": "去工位页点「修改配置」。",
 }
 
 EN = {
@@ -97,4 +100,7 @@ EN = {
     "tray.stderr.already_open": "agentboxbox is already open on port {port}; asking it to show its window instead of starting again.",
     "tray.stderr.other_core": "another version of the core is running on port {port} ({other}); asking the user whether to stop it.",
     "tray.stderr.old_started": "the old version is stopped, starting the core of {v}.",
+    "tray.notify.config": "{who} has a config problem",
+    "tray.notify.many_config": "{n} cats have a config problem",
+    "tray.notify.tail_config": "Open the Stations page and click Change settings.",
 }

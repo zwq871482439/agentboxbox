@@ -203,7 +203,7 @@ window.BXi18n.register({
       copyFail: "Copy failed",
       runnerManual: "You open the chat in your AI app",
       runnerOnce: "Runs with an API key",
-      runnerScheduled: "Session mode: your AI app checks in on a timer",
+      runnerScheduled: "Check-in mode: your AI app checks in on a timer",
       runnerCustom: "Custom",
       runnerNone: "Not set up",
       roleLeader: "Leader",

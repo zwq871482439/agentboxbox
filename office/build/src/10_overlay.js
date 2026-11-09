@@ -20,6 +20,7 @@ function statusWord(ch){const st=ch.state,lead=ch.st.lead,k=actKind(ch);
   if(SCENE&&PARTY.includes(SCENE.name)&&SCENE.ids.has(ch.id))return PARTY_WORD[SCENE.name]||TR("st.meeting");   /* –庆祝 / 复盘中 */
   if(lead&&st!=="off"&&st!=="you"){const n=(DATA&&DATA.arch&&DATA.arch.count)||0;return n?TR("st.todoN",{n}):TR("st.noTodo")}
   if(st==="off")return TR("q.off");if(st==="fail")return TR("state.fail");if(st==="appr")return TR("state.appr");
+  if(st==="config")return (ch.data&&ch.data.state_word)||TR("state.config");
   if(st==="rest")return TR("state.rest");   /* 歇着：画布上写短词，完整那句（几点回来）给悬停 */
   if(st==="you")return lead?TR("st.yourCall"):TR("st.waiting");
   if(st==="arch")return lead?(DATA&&DATA.arch&&DATA.arch.count?TR("st.hasTodoN",{n:DATA.arch.count}):TR("st.hasTodo")):TR("st.waiting");
@@ -48,7 +49,7 @@ let BUBQ=[], BUBLOG=[];
 /* v2：「想法」= 白底像素气泡（? 等待 / × 失败 / ! 要决策），状态持续多久就挂多久；
    「身体反应」画在猫旁边、不进气泡：Zzz 睡着、汗滴 紧张、♪ 聊天 */
 function thoughtOf(ch){const st=ch.state,lead=ch.st.lead;if(st==="off")return null;
-  if(st==="you")return lead?"bang":"!";if(st==="fail")return"×";
+  if(st==="you")return lead?"bang":"!";if(st==="fail"||st==="config")return"×";
   if(!lead&&DATA&&DATA.leader_quiet&&st==="idle")return"?";   /* 首领没反应，围过去的空闲猫冒 ? */
   if(st==="arch"&&!lead&&!ch.moving)return"…";return null}   /* 卡住 / 打回待定 / 等首领验收 → 省略号 */
 function persistentSym(ch){const th=thoughtOf(ch);if(th)return th;

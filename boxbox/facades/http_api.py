@@ -5,7 +5,7 @@ import re
 import threading
 import urllib.parse
 
-from .. import __version__, config, connectors, i18n, pi_catalog, pi_config, providers, quota, scenes, tmpdir, tokens
+from .. import __version__, config, connectors, efficiency, i18n, pi_catalog, pi_config, providers, quota, runlog, scenes, tmpdir, tokens
 from ..store import now_iso
 from .http_const import (
     COPY_DECOR,
@@ -29,7 +29,7 @@ def handle_get(h, u, q):
             if u.path == "/api/tasks":
                 return h._json({"tasks": [{k: t.get(k) for k in ("id", "title", "kind", "assignee", "state", "round", "dispatcher", "created_at", "updated_at")}
                                              | {"wait_reason": (t.get("card") or {}).get("wait_reason"),   # 排队原因（等这只猫腾出手 / 等接口）
-                                                "wait_text": d.queue_text(t)}   # 排队写清楚等谁（页面跟看板 / 办公室同一句）
+                                                "wait_text": d.wait_text(t)}   # 只有真在排队才写，跟卡详情同一句
                                              for t in store.list_tasks(state=(q.get("state") or [None])[0], limit=int((q.get("limit") or ["200"])[0]))]})
             m = re.match(r"^/api/tasks/(\d{8}-\d{3})$", u.path)
             if m:
@@ -44,6 +44,8 @@ def handle_get(h, u, q):
                 return h._json({"runs": store.recent_runs(int((q.get("limit") or ["50"])[0])), "events": store.events(int((q.get("limit") or ["100"])[0]))})
             if u.path == "/api/tokens":
                 return h._json(tokens.summary(store, days=int((q.get("days") or ["7"])[0]), lang=i18n.lang()))
+            if u.path == "/api/efficiency":
+                return h._json(efficiency.report(store, days=(q.get("days") or ["7"])[0]))
             if u.path == "/api/providers":                  # 服务商清单（models.dev 快照）；lite=1 只要元信息
                 if (q.get("lite") or ["0"])[0] in ("1", "true"):
                     return h._json(providers.meta())
@@ -52,6 +54,8 @@ def handle_get(h, u, q):
                 return h._json(config.settings())
             if u.path == "/api/tmp":                            # 临时文件占多大
                 return h._json({"bytes": tmpdir.size_bytes()})
+            if u.path == "/api/data":                           # data\ 占多大，其中运行记录多少；正在整理没有
+                return h._json(runlog.usage())
             if u.path == "/api/onboard/state":                  # 首页 / Onboard 都用它推导当前步骤
                 return h._json(_onboard_state(d))
             if u.path == "/api/onboard/progress":                # 上岗进度（§5）：刷新、关掉后接着走
@@ -146,7 +150,7 @@ def handle_get(h, u, q):
                     sid = str(st.get("id") or "")
                     if not sid or str((st.get("quota") or {}).get("mode") or "off") == "off":
                         continue
-                    res = store.kv_get("quota:" + sid)
+                    res = quota.read(store, st)
                     if isinstance(res, dict):
                         quotas[sid] = res
                 feed = office_feed.build(meta, d.board(), d.todo(), tokens.summary(store, days=1, lang=i18n.lang()),
@@ -196,6 +200,8 @@ def handle_post(h, u, body):
             if sid and info.get("name"):
                 h._note_client(sid, [{"method": "initialize",
                                          "params": {"clientInfo": {"name": info.get("name")}}}], True)
+            from .http_leader import begin_delivery
+            begin_delivery()          # stdio 桥这条也一样：写进它的连接成功才算送到
             return h._json(h.core.call(m.group(1), sid, body.get("args") or {}))
         if u.path == "/mcp":                                  # MCP over HTTP：客户端配置里只写 url，不再起子进程占着 exe
             return h._mcp(body, (urllib.parse.parse_qs(u.query).get("station") or [""])[0])
@@ -211,6 +217,14 @@ def handle_post(h, u, body):
             skipped = tmpdir.count_running(running)
             removed = tmpdir.clean(0, running)
             return h._json({"removed": removed, "skipped": skipped})
+        if u.path == "/api/data/clean":                     # 结束的卡的运行记录：不等天数，现在就压（到天数的删）
+            started = runlog.sweep_in_background(h.core.d.store, force_gzip=True)
+            return h._json({"ok": True, "started": started, "cleaning": True})
+        if u.path == "/api/import_old":                     # 设置页「从旧版导入」：换进旧版的猫、设置和卡
+            from .. import import_old
+            raw = body.get("path") if isinstance(body, dict) else ""
+            out = import_old.import_from(h.core.d, raw if isinstance(raw, str) else "")
+            return h._json(out, 200 if out.get("ok") else 400)
         if u.path == "/api/interrupted/resume":             # 「全部接着做」：接着上次的对话继续
             d = h.core.d
             ids = [str(i) for i in (body.get("ids") or []) if i]
@@ -241,6 +255,8 @@ def handle_post(h, u, body):
             return h._json({"ok": True, "stations": config.stations()})
         if u.path == "/api/stations":                       # upsert one station (onboarding / settings)
             st = body.get("station") if isinstance(body.get("station"), dict) else body
+            add_leader = bool(st.get("add_leader"))           # 工位页「再加一个首领」才带；上岗是换掉主首领
+            st = {k: v for k, v in st.items() if k != "add_leader"}
             st = dict(st, role=normalize_role(st.get("role")))
             errs = _station_errors(st)
             if errs:
@@ -255,14 +271,21 @@ def handle_post(h, u, body):
             cur = config.stations()
             items = [s for s in cur if s.get("id") != st["id"]]
             old = next((s for s in cur if s.get("id") == st["id"]), None)     # 已有的猫不挪位置
+            # 放回原来的位置：主首领是列表里第一个首领，改个样子不能把它挪到后面、让别的首领顶上来
+            at = next((i for i, s in enumerate(cur) if s.get("id") == st["id"]), None)
             st = pi_catalog.keep_compat(old, st)          # 只改名字 / 样子：之前自动打开的兼容开关留着
             if st.get("role") == "leader":
-                # 首领只有一个：新首领进来，旧首领那条工位换掉（删掉），不能降成打工猫（降下来的猫没有接活方式）
-                for s in list(items):
-                    if s.get("role") == "leader":
-                        items.remove(s)
-                        config.set_secret(str(s.get("id") or ""), None)
-                        h.core.d.runners.pop(str(s.get("id") or ""), None)
+                # 名字撞上打工猫就拒掉，不能把猫改成首领（接活方式对不上）
+                if old is not None and old.get("role") != "leader":
+                    return h._json({"ok": False, "code": "name_taken",
+                                    "text": i18n.t("api.err_name_taken", i18n.lang(), sid=st.get("id"))}, 400)
+                primary = config.leader_id()
+                if old is None and not add_leader and primary and primary != st["id"]:
+                    # 上岗时给首领换了名字：换掉主首领，不是再多一个（多一个首领只走「再加一个首领」）
+                    at = next(i for i, s in enumerate(items) if s.get("id") == primary)
+                    items.pop(at)
+                    config.set_secret(primary, None)
+                    h.core.d.runners.pop(primary, None)
                 st["slot"] = config.LEADER_SLOT
             elif old is not None:
                 st["slot"] = old.get("slot")
@@ -272,12 +295,18 @@ def handle_post(h, u, body):
                 if slot is None:
                     return h._json({"ok": False, "code": "slots_full", "text": i18n.t("api.slots_full", i18n.lang())}, 400)
                 st["slot"] = slot
-            items.append(st)
+            if at is None:
+                items.append(st)
+            else:
+                items.insert(at, st)
             config.save_stations(items)
             # 重新打开一只猫：清掉它的歇着状态，排队的卡接着干
             if old is not None and not old.get("enabled", True) and st.get("enabled", True):
                 h.core.d.clear_resting(st["id"])
                 h.core.d.start_ready_queued()
+            # 配置保存过了（哪怕只改了名字）：配置有问题的标记清掉，排队的卡用新配置开工
+            if old is not None:
+                h.core.d.release_config_bad(st["id"])
             h.core.d.drop_idle_runners()   # 丢掉没在跑进程的运行器：在跑的卡不能误伤
             return h._json({"ok": True, "station": st, "stations": config.stations()})
         if u.path == "/api/stations/copy":                     # 复制一只打工猫（工牌上的「复制」）
@@ -337,6 +366,7 @@ def handle_post(h, u, body):
             items = [s for s in config.stations() if s.get("id") != sid]
             config.save_stations(items)
             config.set_secret(sid, None)                       # a deleted station takes its key with it
+            d.clear_config_bad(sid)
             d.runners.pop(sid, None)
             d.retired.pop(sid, None)                            # 退休的运行器也一并扔掉
             # 复制出来的猫删掉时不删它的目录和分支（怕删掉没合的活），回执和事件里说清楚
@@ -378,6 +408,7 @@ def handle_post(h, u, body):
                 return h._json({"ok": False, "code": "bad_key",
                                 "text": i18n.t("api.bad_key", i18n.lang())}, 400)
             config.set_secret(sid, key or None)
+            h.core.d.release_config_bad(sid)                # 改了 key：配置有问题的标记清掉，排队的卡接着开
             runner = h.core.d.runners.get(sid)
             if not (runner is not None and getattr(runner, "live", None)):
                 h.core.d.runners.pop(sid, None)             # next run rebuilds the env with the new key

@@ -2,7 +2,7 @@
 const WW=480, LOK=2; let WH=270;  /* 大办公室：16:9，四个区（工位区 / 茶水间 / 沙发区 / 会议室） */               // 世界坐标 360×256；低清画布 2×（屏幕内容可以画到半像素）；猫猫 1 像素 = 1 世界像素
 const STATE={run:["state.run","#3ddc84"],arch:["state.arch","#f5b301"],you:["state.you","#ff4d4f"],idle:["state.idle","#8d8d9b"],
   off:["state.off","#5c5c6b"],rest:["state.rest","#f5b301"],fail:["state.fail","#ff4d4f"],appr:["state.appr","#5aa9ff"],
-  done:["state.done","#8d8d9b"],block:["state.block","#8d8d9b"]};
+  done:["state.done","#8d8d9b"],block:["state.block","#8d8d9b"],config:["state.config","#ff4d4f"]};
 const stateWord=s=>(STATE[s]||["state.idle","#8d8d9b"])[0];   /* 状态词走词表：画布上写的是当前语言 */
 
 /* ===================== 昼夜（assets/design/office-daynight/spec.md，UI 组 ）=====================
@@ -84,19 +84,30 @@ function thawClock(){if(REAL_NOW!==null){Date.now=REAL_NOW;REAL_NOW=null}FROZEN_
     return((t^t>>>14)>>>0)/4294967296}}
   if(ck!==null&&ck!=="")freezeClock(parseInt(ck,10)||0)})();
 
-/* 。
-   第 1 级一条一行「text → action」，最多 3 行，多了写「还有 N 条」；action_id=summon 的那行带「叫醒首领」。 */
+/* 第 1 级一条一行「text → action」，最多 3 行，多了写「还有 N 条」。
+   叫醒首领、再加一个首领这两条带按钮，点了就能去做。 */
 function lvl1Alerts(){return ((DATA&&DATA.alerts)||[]).filter(a=>a&&a.level===1)}
+function alertActionBtn(a, drawer){
+  if(a.action_id==="summon"){
+    const attr=drawer?' id="d-summon"':' data-summon="'+esc(a.station||"")+'"';
+    return '<button type="button"'+attr+">"+TR("alert.summon")+"</button>";
+  }
+  if(a.action_id==="add_leader"){
+    const attr=drawer?' id="d-add-leader"':" data-add-leader";
+    return '<button type="button"'+attr+">"+TR("alert.addLeader")+"</button>";
+  }
+  return "";
+}
 function renderAlertBar(){
   const bar=$("#alertbar");if(!bar)return;const all=lvl1Alerts();
   if(!all.length){bar.hidden=true;bar.innerHTML="";return}
   const rows=all.slice(0,3).map(a=>`<div class="al"><span class="al-t"><b>!</b><span>${esc(a.text||"")}${a.action?" → ":""}
-    <span class="act">${esc(a.action||"")}</span></span></span>
-    ${a.action_id==="summon"?`<button type="button" data-summon="${esc(a.station||"")}">${TR("alert.summon")}</button>`:""}</div>`).join("")
+    <span class="act">${esc(a.action||"")}</span></span></span>${alertActionBtn(a)}</div>`).join("")
     +(all.length>3?`<div class="more">${TR("alert.more",{n:all.length-3})}</div>`:"");
   bar.innerHTML=rows;
   bar.hidden=false;
   bar.querySelectorAll("[data-summon]").forEach(b=>b.onclick=()=>summonLeader(b.getAttribute("data-summon")));
+  bar.querySelectorAll("[data-add-leader]").forEach(b=>b.onclick=()=>openAddLeader());
 }
 /* 「叫醒首领」：复用原横幅「看怎么叫它回来」的逻辑——bx-summon 事件（首页接住开上岗抽屉），没人接就跳 /#summon=。
    嵌在首页 iframe 里时事件发给父页面。 */
@@ -104,4 +115,9 @@ function summonLeader(sid){
   try{const w=(EMBED&&window.parent&&window.parent!==window)?window.parent:window;
     const ev=new w.CustomEvent("bx-summon",{cancelable:true,detail:sid||""});
     if(w.dispatchEvent(ev))w.location.href="/#summon="+encodeURIComponent(sid||"")}catch(e){location.href="/#summon="+encodeURIComponent(sid||"")}
+}
+/* 再加一个首领在工位页。嵌在首页里时跳父页面，别只换掉这一块画布。 */
+function openAddLeader(){
+  try{const w=(EMBED&&window.parent&&window.parent!==window)?window.parent:window;
+    w.location.href="/stations"}catch(e){location.href="/stations"}
 }

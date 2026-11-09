@@ -40,7 +40,7 @@ function openDrawer(id){
   else{const ch=CH[id];if(!ch)return closeDrawer();const d=ch.data,left=d.quota_left_pct;
     const al=lvl1Alerts().find(a=>a.station===id);   /* 点一只头上有 ! 的猫，抽屉最上面也显示它那条提示 */
     const alHtml=al?`<div class="drawer-alert"><b>!</b> ${esc(al.text||"")}${al.action?" → "+esc(al.action):""}${
-    al.action_id==="summon"?`<button type="button" id="d-summon">${TR("alert.summon")}</button>`:""}</div>`:"";
+    alertActionBtn(al,true)}</div>`:"";
     const tk=d.tok&&d.tok.today?`${TR("p.tokenIn",{a:fmt(d.tok.today.in),b:fmt(d.tok.today.out),c:fmt(d.tok.today.cr)})}<br>${
     TR("p.hit",{n:d.tok.today.hit})}${TR("p.sep")}${TR("p.calls",{n:d.tok.today.calls})}`:`<span style="color:var(--dim)">${TR("p.noData")}${
     d.tok&&d.tok.na?TR("p.paren",{v:esc(d.tok.na)}):""}</span>`;
@@ -56,6 +56,7 @@ function openDrawer(id){
     html=alHtml+html}
   $("#dbody").innerHTML=html;$("#drawer").classList.add("open");
   const ds=$("#d-summon");if(ds)ds.onclick=()=>summonLeader((lvl1Alerts().find(a=>a.action_id==="summon")||{}).station||"");
+  const da=$("#d-add-leader");if(da)da.onclick=()=>openAddLeader();
 }
 const fmt=n=>n==null?"–":n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":n;
 function chip(s){const v=STATE[s]||[s,"#8d8d9b"];return `<span class="chip" style="color:${v[1]}">${TR(v[0])}</span>`}

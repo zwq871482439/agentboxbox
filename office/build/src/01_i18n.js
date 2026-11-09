@@ -3,10 +3,10 @@
    这里只放「画布上看得见的字」；接口回来的文字（状态词、提醒）已经是当前语言。 */
 const I18N_ZH={
 "state.run":"进行中","state.arch":"等待首领","state.you":"需要用户决策","state.idle":"空闲",
-"state.off":"已停用","state.rest":"歇着","state.fail":"失败","state.appr":"审查中",
+"state.off":"已停用","state.rest":"歇着","state.fail":"失败","state.config":"配置有问题","state.appr":"审查中",
 "state.done":"已完成","state.block":"已拦截",
 "phase.day":"白天","phase.dusk":"傍晚","phase.night":"夜晚","phase.dawn":"清晨",
-"alert.summon":"叫醒首领","alert.more":"还有 {n} 条",
+"alert.summon":"叫醒首领","alert.addLeader":"再加一个首领","alert.more":"还有 {n} 条",
 "st.nap":"午睡中","st.meeting":"开会中","st.todoN":"有 {n} 条待办","st.noTodo":"无待办",
 "st.yourCall":"待你拍板","st.waiting":"等待中","st.hasTodo":"有待办","st.hasTodoN":"有待办 {n}",
 "st.delivering":"交活中","st.working":"工作中","st.brew":"煮咖啡中","st.drink":"喝咖啡中",
@@ -82,10 +82,10 @@ const I18N_ZH={
 };
 const I18N_EN={
 "state.run":"Working","state.arch":"Waiting for the leader","state.you":"Needs your call",
-"state.idle":"Idle","state.off":"Disabled","state.rest":"On a break","state.fail":"Failed",
+"state.idle":"Idle","state.off":"Disabled","state.rest":"On a break","state.fail":"Failed","state.config":"Config problem",
 "state.appr":"In review","state.done":"Done","state.block":"Blocked",
 "phase.day":"Day","phase.dusk":"Dusk","phase.night":"Night","phase.dawn":"Dawn",
-"alert.summon":"Wake the leader","alert.more":"{n} more",
+"alert.summon":"Wake the leader","alert.addLeader":"Add another leader","alert.more":"{n} more",
 "st.nap":"Napping","st.meeting":"In a meeting","st.todoN":"{n} to do","st.noTodo":"Nothing to do",
 "st.yourCall":"Your call","st.waiting":"Waiting","st.hasTodo":"Has to-do","st.hasTodoN":"{n} to do",
 "st.delivering":"Delivering","st.working":"Working","st.brew":"Brewing coffee","st.drink":"Drinking coffee",

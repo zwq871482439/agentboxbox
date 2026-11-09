@@ -12,10 +12,12 @@ orphans()：找上次留下的、命令行里带着本 data 目录的 node / pi 
 from __future__ import annotations
 
 import os
+import pathlib
 import signal
 import subprocess
 import sys
 import threading
+import time
 
 IS_WIN = sys.platform.startswith("win")
 _lock = threading.Lock()
@@ -106,6 +108,155 @@ def pid_alive(pid) -> bool:
         return code.value == 259                        # STILL_ACTIVE
     finally:
         k32.CloseHandle(h)
+
+
+def kill_pid(pid, timeout: float = 5.0) -> bool:
+    """按进程号结束它和它的子进程。已经不在了也算停掉了。返回现在是不是已经不在。"""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return True
+    if pid <= 0 or pid == os.getpid():
+        return False
+    if not pid_alive(pid):
+        return True
+    try:
+        if IS_WIN:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True, timeout=timeout,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            _kill_posix(pid)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    _reap(pid)
+    deadline = time.time() + min(timeout, 2.0)
+    while time.time() < deadline and pid_alive(pid):
+        time.sleep(0.05)
+        _reap(pid)
+    return not pid_alive(pid)
+
+
+def _kill_posix(pid: int) -> None:
+    """进程自己是一组的头（起进程时 start_new_session）就整组结束，否则连子进程一个个结束。"""
+    try:
+        os.killpg(pid, signal.SIGKILL)
+        return
+    except OSError:
+        pass
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
+    for kid in children(pid):
+        try:
+            os.kill(int(kid["pid"]), signal.SIGKILL)
+        except (OSError, TypeError, ValueError):
+            pass
+
+
+def _reap(pid: int) -> None:
+    """我们拉起来的进程被杀掉后会变成僵尸，不回收的话还显示活着。不是我们的子进程就忽略。"""
+    if IS_WIN:
+        return
+    try:
+        os.waitpid(pid, os.WNOHANG)
+    except (ChildProcessError, OSError):
+        pass
+
+
+def children(pid) -> list[dict]:
+    """这个进程底下还活着的子进程（含孙进程）：name、cmd 前 100 字、age_s。查不到就空列表。"""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return []
+    if pid <= 0:
+        return []
+    if IS_WIN:
+        return _children_win(pid)
+    return _children_posix(pid)
+
+
+def _children_posix(pid: int) -> list[dict]:
+    snap = _proc_snapshot()
+    by_ppid: dict[int, list] = {}
+    for info in snap.values():
+        by_ppid.setdefault(info["ppid"], []).append(info)
+    out = []
+    stack = list(by_ppid.get(pid, []))
+    seen: set[int] = set()
+    while stack:
+        info = stack.pop()
+        if info["pid"] in seen:
+            continue
+        seen.add(info["pid"])
+        out.append({"pid": info["pid"], "name": info["name"], "cmd": info["cmd"], "age_s": info["age_s"]})
+        stack.extend(by_ppid.get(info["pid"], []))
+    out.sort(key=lambda x: -int(x["age_s"]))
+    return out
+
+
+def _proc_snapshot() -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    if not os.path.isdir("/proc"):
+        return out
+    try:
+        clk = os.sysconf("SC_CLK_TCK") or 100
+        uptime = float(pathlib.Path("/proc/uptime").read_text().split()[0])
+    except (OSError, ValueError):
+        return out
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        info = _proc_one(int(name), clk, uptime)
+        if info:
+            out[info["pid"]] = info
+    return out
+
+
+def _proc_one(pid: int, clk: int, uptime: float) -> dict | None:
+    try:
+        raw = pathlib.Path("/proc/%d/stat" % pid).read_text()
+        left, right = raw.find("("), raw.rfind(")")
+        comm = raw[left + 1:right]
+        rest = raw[right + 2:].split()
+        ppid = int(rest[1])
+        start = int(rest[19])
+        age = int(uptime - start / clk) if clk else 0
+        cmd = pathlib.Path("/proc/%d/cmdline" % pid).read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+    except (OSError, ValueError, IndexError):
+        return None
+    return {"pid": pid, "ppid": ppid, "name": comm or "?", "cmd": (cmd or comm)[:100], "age_s": max(0, age)}
+
+
+def _children_win(pid: int) -> list[dict]:
+    # 分隔符用 [char]9：单引号里的 `t 不会变成制表符。起了多久在 PowerShell 里算成秒，
+    # 不把日期转成字符串（中文系统上是「2026/11/7 10:41:00」这种本地格式，Python 这边解析不了）。
+    # 输出编码设成 UTF-8：命令行里的中文路径别变乱码。
+    ps = ("[Console]::OutputEncoding=[Text.Encoding]::UTF8; $root=%d; $t=[char]9; $now=Get-Date; "
+          "$all=Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine,CreationDate; "
+          "$kids=@(); $q=New-Object System.Collections.Queue; $q.Enqueue($root); $seen=@{}; "
+          "while($q.Count){ $p=$q.Dequeue(); foreach($x in $all){ "
+          "if($x.ParentProcessId -eq $p -and -not $seen.ContainsKey([int]$x.ProcessId)){ "
+          "$seen[[int]$x.ProcessId]=1; $kids+=$x; $q.Enqueue([int]$x.ProcessId) } } }; "
+          "$kids | ForEach-Object { $age=0; if($_.CreationDate){ $age=[int]($now-$_.CreationDate).TotalSeconds }; "
+          "[string]$_.Name+$t+$_.ProcessId+$t+$age+$t+$_.CommandLine }") % pid
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
+                             timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rows = []
+    for line in out.stdout.decode("utf-8", "replace").splitlines():
+        name, _, rest = line.partition("\t")
+        pid_s, _, rest = rest.partition("\t")
+        age_s, _, cmd = rest.partition("\t")
+        if not pid_s.strip().isdigit():
+            continue
+        age = int(age_s) if age_s.strip().lstrip("-").isdigit() else 0
+        rows.append({"pid": int(pid_s), "name": name.strip() or "?", "cmd": cmd.strip()[:100], "age_s": max(0, age)})
+    rows.sort(key=lambda x: -int(x["age_s"]))
+    return rows
 
 
 def kill_tree(proc: subprocess.Popen, timeout: float = 5.0) -> None:

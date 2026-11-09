@@ -17,6 +17,8 @@ ZH = {
                             "工作目录里是你写了一半的，先看一眼再接着做。",
     "card.resume.interrupted": "【接着做】上次在 {at} 被打断，工作目录里的文件可能是你写了一半的，"
                             "先 git status / 看一眼再接着做（上一轮的对话记录还在，接着上面那条往下做）。",
+    "card.notes.follow": "首领在你干活时留了言：{text}。处理完再按原来的要求交卡",
+    "card.notes.pending": "首领留了言，这张卡开工时先看：{text}",
     "card.list_sep": "；",
     "tokens.note": "只记实测用量；没有接口的工位显示「不计」；估算花费按 models.dev 公开价",
     "gates.not_object": "gates[{i}] 不是对象",
@@ -108,6 +110,9 @@ EN = {
                               "Files in the working folder may be half-written; check them before you continue.",
     "card.resume.interrupted": "[Resume] The previous run was cut off at {at}. Files in the working folder may be half-written; "
                                "run git status or take a look before you continue (the previous conversation is still there, so carry on from it).",
+    "card.notes.follow": "The leader left a note while you were working: {text}. "
+                         "Handle it, then hand the card back the way it was originally asked.",
+    "card.notes.pending": "The leader left a note. Read it before you start this card: {text}",
     "card.list_sep": "; ",
     "tokens.note": "only measured usage is counted; a station without an API shows \"not counted\"; "
                    "estimated cost uses the public models.dev prices",

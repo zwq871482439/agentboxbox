@@ -1,8 +1,6 @@
-/* 工位页脚本：挂绳工牌一列 + 查看详情抽屉 + 工位编辑浮层。
-   页面（stations.html）先引 topbar.js / providers.js / cats.js，再引本文件。 */
+/* 工位页：工牌、详情抽屉、编辑浮层。词条在 i18n-stations.js。 */
 (function () {
   var NS = window.BXST = window.BXST || {};
-  /* 词条都在 i18n-stations.js 里；没引 i18n.js 时退回中文（页面自己也会引） */
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
   var CLIENT_LABEL = {
     cursor: "Cursor", "claude-code": "Claude Code", codex: "Codex", pi: "Pi",
@@ -85,12 +83,13 @@
 
   /* 首领掉线不再自己按 wake_min 算（会和看板 / 详情 / 办公室打架）。词一律用 /api/stations 的 word；
      只有核心的提醒里有 leader_quiet 时才说「没反应」。 */
-  function leaderOffline() {
-    return (meta.alerts || []).some(function (a) { return a && a.kind === "leader_quiet"; });
+  function leaderOffline(sid) {
+    return (meta.alerts || []).some(function (a) { return a && a.kind === "leader_quiet" && (!sid || a.station === sid); });
   }
 
   /* 样式按 word_code 判（界面上换成哪种语言都一样的意思） */
   function wordClass(code) {
+    if (code === "stuck" || code === "config") { return "bad"; }
     if (code === "running" || code === "running_queue" || code === "sched_late" || code === "rest") { return "busy"; }
     if (code === "off" || code === "off_queue") { return "off"; }
     if (code === "not_connected" || code === "wait_sched") { return "bad"; }
@@ -244,7 +243,7 @@
     var b = board[st.id] || {};
     var word = b.word || T("st.idle");
     var code = b.word_code || "";
-    var offline = lead && leaderOffline();
+    var offline = lead && leaderOffline(st.id);
     if (offline) { word = T("st.noReact"); code = "no_react"; }
     var slot = st.slot || (lead ? "leader" : "-");
     var top = lead ? T("st.badgeTopLeader") : T("st.badgeTopMember", { slot: slot });
@@ -269,6 +268,9 @@
         esc(T("st.reRecruit")) + "</button>" +
         '<button class="mbtn' + (offline || code === "not_connected" ? " hl" : "") + '" data-summon="' + esc(st.id) +
         '" title="' + esc(T("st.wakeTitle")) + '">' + esc(T("st.wake")) + "</button>";
+      if (defs.filter(function (s) { return s.role === "leader"; }).length > 1) {
+        html += '<button class="mbtn danger" data-del="' + esc(st.id) + '" title="' + esc(T("st.delLeaderTitle")) + '">' + esc(T("st.del")) + "</button>";
+      }
     } else {
       var full = slotsFull();
       var copyTip = full ? ' disabled title="' + esc(T("st.copyFullTitle")) + '"'
@@ -285,27 +287,27 @@
   }
 
   function render() {
-    var leader = defs.filter(function (s) { return s.role === "leader"; })[0] || null;
+    var leaders = defs.filter(function (s) { return s.role === "leader"; });
     var members = defs.filter(function (s) { return s.role !== "leader"; }).sort(function (a, b) {
       var oa = SLOT_ORDER[a.slot] == null ? 9 : SLOT_ORDER[a.slot];
       var ob = SLOT_ORDER[b.slot] == null ? 9 : SLOT_ORDER[b.slot];
       return oa - ob || String(a.id).localeCompare(String(b.id));
     });
-    lastOffline = leader ? leaderOffline() : null;
-    $("#head-count").textContent = T("st.headCount", { l: leader ? 1 : 0, m: members.length });
+    lastOffline = leaders.length ? leaderOffline() : null;
+    $("#head-count").textContent = T("st.headCount", { l: leaders.length, m: members.length });
     var html = "";
     if (!defs.length) {
       html = '<div class="empty">' + esc(T("st.empty")) + "</div>";
     } else {
-      if (leader) { html += badgeHTML(leader, 0); }
+      html += leaders.map(function (s) { return badgeHTML(s, 0); }).join("");
       html += members.map(function (s, i) { return badgeHTML(s, i); }).join("");
     }
     $("#badges").innerHTML = html;
-    var ordered = leader ? [leader].concat(members) : members;      /* 工牌在页面上的顺序，对着 canvas 一张张画头像 */
+    var ordered = leaders.concat(members);      /* 工牌顺序，对着 canvas 画头像 */
     Array.prototype.forEach.call($("#badges").querySelectorAll("canvas.avatar"), function (cv, i) {
-      if (ordered[i]) { drawAvatar(cv, ordered[i], leader ? i - 1 : i); }
+      if (ordered[i]) { drawAvatar(cv, ordered[i], i - leaders.length); }
     });
-    $("#lonely").hidden = !(leader && !members.length);
+    $("#lonely").hidden = !(leaders.length && !members.length);
     var btn = $("#btn-new");
     if (slotsFull()) {
       btn.disabled = true;
@@ -794,5 +796,5 @@
   });
 
   load();
-  window.BXStations = { load: load, pickFreeCat: pickFreeCat };   // pickFreeCat 给页面自测用
+  window.BXStations = { load: load, pickFreeCat: pickFreeCat, summon: summon, pageMsg: pageMsg };
 })();

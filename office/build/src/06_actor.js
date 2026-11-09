@@ -155,7 +155,7 @@ if(ch.bossAnim==="tea"){if(ch.cup>0)ch.cup--;else if(SKIN.zoned){const [bx,by]=S
   else if(SKIN.zoned&&ch.goal==="meet"){ch.goal=null;ch.deliver=false;wantHome(ch,st==="run"?"type":"sit")}
   else if(SKIN.zoned&&ch.deliver&&st==="idle"){ /* 交活：抱着文件进会议室，TeamLeader 一起验收 */
     if(ch.goal!=="deliver"){leaveBox(ch);ch.carry=true;const [mx,my]=MEET_SEATS[1];goTo(ch,mx,my,true);ch.goal="deliver";ch.after="sit"}}
-  else if(st==="run"||st==="fail"||st==="appr"||st==="you"){wantHome(ch,st==="run"?"type":"sit",st==="run")}
+  else if(st==="run"||st==="fail"||st==="appr"||st==="you"||st==="config"){wantHome(ch,st==="run"?"type":"sit",st==="run")}
   else if(st==="arch"){ /* 等待 / 卡住：坐在自己工位上冒省略号（不再跑去 TeamLeader 旁边站着） */
     if(SKIN.zoned)wantHome(ch,"sit");else{const slot=[[132,132],[234,132]][Object.values(CH).filter(x=>x.state==="arch"&&!x.st.lead).indexOf(ch)%2];
     if(ch.goal!=="wait"){leaveBox(ch);goTo(ch,slot[0],slot[1]);ch.goal="wait";ch.after="wait"}}}

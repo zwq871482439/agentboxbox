@@ -1,0 +1,48 @@
+name: 问题 / Report a problem
+description: 盒子没有按你想的那样工作。The box did not do what you expected.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        安全问题请不要开公开 issue，按 SECURITY.md 私下报告（仓库页面 Security）。
+        For a security problem, do not open a public issue. Report it privately as described in SECURITY.md.
+
+        贴下面的诊断信息之前，先自己看一眼有没有不想公开的内容。路径和密钥已经打码，里面仍可能有你不想给别人看的话。
+        Before you paste the diagnostics, read them once. Paths and keys are masked, but something you do not want public may still be in there.
+  - type: input
+    id: version
+    attributes:
+      label: 版本号 / Version
+      description: 设置页底部的「当前版本」，或托盘菜单里的「版本」。比如 0.5.0。The "Version" line at the bottom of Settings, or "Version" in the tray menu. For example 0.5.0.
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本 / Windows version
+      description: 在 Windows 的「设置 → 系统 → 关于」里能看到。比如 Windows 11 24H2。Settings, System, About. For example Windows 11 24H2.
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么复现 / How to reproduce
+      description: 按顺序写你做了什么、你以为会怎样、实际怎样。Write what you did, what you expected, and what happened, in order.
+      placeholder: |
+        1.
+        2.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 自检页「复制诊断信息」 / Diagnostics from the check page
+      description: |
+        打开自检页（顶栏「自检」，或地址 /doctor），点「复制诊断信息」，整段贴在这里。打不开就写打不开。
+        贴之前自己再看一眼，有不想公开的就删掉。
+        Open Check in the top bar (or /doctor), click "Copy the diagnostics", and paste it here. If the page will not open, say so.
+        Read it once more and delete anything you do not want public.
+    validations:
+      required: true

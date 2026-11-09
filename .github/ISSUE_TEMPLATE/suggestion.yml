@@ -1,0 +1,22 @@
+name: 建议 / Suggest a change
+description: 想让盒子多做一件事，或把现有的做得更好。Something you want the box to do, or to do better.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        盒子坏了、结果不对，用「问题」模板。安全问题请不要开公开 issue，按 SECURITY.md 私下报告。
+        If something is broken, use the problem template. For a security problem, do not open a public issue. Report it privately as described in SECURITY.md.
+  - type: textarea
+    id: want
+    attributes:
+      label: 你想要什么 / What you want
+      description: 一句话说你希望盒子变成什么样。One sentence on what you want the box to do.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: 现在怎么用、卡在哪里 / How you do it today
+      description: 你现在是怎么做的，哪里不顺手。可选。How you do it now, and where it gets in the way. Optional.
+    validations:
+      required: false
