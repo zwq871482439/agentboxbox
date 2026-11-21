@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-import os
 import pathlib
 import threading
 import urllib.parse
@@ -93,10 +92,7 @@ def trim(api: dict, updated: str | None = None) -> dict:
 
 
 def _save(path: pathlib.Path, snap: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(snap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    os.replace(tmp, path)
+    config._write_json(path, snap, indent=None, separators=(",", ":"))
 
 
 def download(url: str = URL, timeout_s: float = 90.0) -> dict:
@@ -157,18 +153,25 @@ def _read(path: pathlib.Path):
 
 
 def _loaded() -> tuple[dict, dict, str]:
-    """(providers 字典, 模型索引, 来源)，带 mtime 缓存。"""
+    """(providers 字典, 模型索引, 来源)。先 stat 拿 (mtime_ns, size) 对签名，文件没动就不读不解析
+    （快照 800 多 KB，查一次价就重读一遍太贵），动了才 _read + _expand。"""
     path, source = _pick_file()
     with _CACHE_LOCK:
+        try:
+            st = path.stat()
+        except OSError:
+            return {}, {}, source
+        sig = (st.st_mtime_ns, st.st_size)
         hit = _CACHE.get("sig")
+        if hit is not None and hit[0] == str(path) and hit[1] == sig:
+            return _CACHE["doc"], _CACHE["index"], source
         got = _read(path)
         if got is None:
             return {}, {}, source
-        path, sig, snap = got
-        if hit is None or hit[0] != str(path) or hit[1] != sig:
-            doc, index = _expand(snap)
-            _CACHE["sig"] = (str(path), sig)
-            _CACHE["doc"], _CACHE["index"], _CACHE["meta"] = doc, index, snap.get("_updated")
+        _, sig, snap = got
+        doc, index = _expand(snap)
+        _CACHE["sig"] = (str(path), sig)
+        _CACHE["doc"], _CACHE["index"], _CACHE["meta"] = doc, index, snap.get("_updated")
         return _CACHE["doc"], _CACHE["index"], source
 
 

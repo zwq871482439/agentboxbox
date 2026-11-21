@@ -22,6 +22,7 @@ import urllib.parse
 import urllib.request
 
 from . import config, i18n
+from .dispatcher_util import _mins_since
 from .store import now_iso
 
 ADAPTERS = ("kimi_code", "glm_coding_plan", "minimax_token_plan", "custom")
@@ -429,6 +430,28 @@ def read(store, st: dict | None):
     return legacy
 
 
+def spent_until(res, now: _dt.datetime) -> str | None:
+    """查到的余量里有窗口用满了（≥100%）、重置时刻还没到：返回最晚的那个重置时刻（ISO）；没有 → None。
+    「工具次数」那种窗口（GLM 的月窗口，label=tools）用满了不挡干活，不算；没写重置时刻的不猜。"""
+    if not isinstance(res, dict) or not res.get("ok"):
+        return None
+    best = None
+    for w in (res.get("windows") or {}).values():
+        if not isinstance(w, dict) or w.get("label") == "tools" or not w.get("reset"):
+            continue
+        try:
+            if float(w.get("pct")) < 100:
+                continue
+            at = _dt.datetime.fromisoformat(str(w["reset"]))
+        except (TypeError, ValueError):
+            continue
+        if at.tzinfo is None:
+            at = at.astimezone()
+        if at > now and (best is None or at > best):
+            best = at
+    return best.isoformat(timespec="seconds") if best else None
+
+
 def peers(st: dict) -> list[str]:
     """和这只猫共用一份额度的其它工位。没有 key 的不算共用（说「共用一把 key」会是假的）。"""
     if not st or st.get("client") != "pi" or not station_key(st):
@@ -476,15 +499,6 @@ def check_station(st: dict, store=None, timeout_s: float = 30.0, http_get=None) 
     return out
 
 
-def _mins_since(iso) -> float:
-    if not iso:
-        return 1e9
-    try:
-        return (_dt.datetime.now().astimezone() - _dt.datetime.fromisoformat(str(iso))).total_seconds() / 60
-    except (TypeError, ValueError):
-        return 1e9
-
-
 def after_run(store, station_id: str) -> threading.Thread | None:
     """工位设了「每轮跑完查一次」：起线程去查，不阻塞收尾。返回起的线程（不用查 → None）。"""
     st = config.station(str(station_id or ""))
@@ -514,7 +528,7 @@ def due_stations(store) -> list[dict]:
         items.sort(key=lambda it: (it[0], str(it[1].get("id") or "")))
         shortest, rep = items[0]
         last = (read(store, rep) or {}).get("fetched")
-        if last and _mins_since(last) < shortest:
+        if last and _mins_since(last, 1e9) < shortest:
             continue
         out.append(rep)
     return out

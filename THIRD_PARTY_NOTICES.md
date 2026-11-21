@@ -14,6 +14,7 @@ agentboxbox 自己的代码是 MIT 许可（见 [LICENSE](LICENSE)）。这份�
 | 文件 | 来源 | 许可 |
 |---|---|---|
 | `static/tabler/tabler.min.css` | Tabler 1.6.1（基于 Bootstrap） | MIT，全文 `static/tabler/LICENSE`，文件头注释保留 |
+| `boxbox/templates/ponytail.md` | Ponytail（`DietrichGebert/ponytail`，提交 `96608e0`）的写代码规则正文 | MIT，出处和版权在文件头，全文见许可文件 |
 | `boxbox/providers.json` | models.dev（`sst/models.dev`）公开清单的裁剪快照 | MIT |
 
 ## 打进 exe 里的第三方组件
@@ -25,21 +26,13 @@ exe 是 PyInstaller 打的单文件包，里面带了下面这些（版本以 TH
 | Python 运行时和标准库 | PSF-2.0 | 运行 agentboxbox |
 | pywebview、pythonnet、clr_loader、bottle、proxy_tools、cffi、pycparser、typing_extensions | BSD-3-Clause / MIT / PSF-2.0 | 内嵌窗口 |
 | Microsoft WebView2 SDK 的 DLL（pywebview 自带） | BSD-3-Clause（Microsoft） | 内嵌窗口；WebView2 运行时本身是 Windows 组件，不在 exe 里 |
-| pystray | **LGPL-3.0** | 托盘图标，见下一节 |
-| Pillow、six | MIT-CMU / MIT | 画托盘图标 |
 | PyInstaller 启动器 | GPL-2.0-or-later，带打包例外 | exe 外壳。这个例外明确允许用任何许可分发打出来的程序 |
 | Node.js | MIT（含其中各组件的许可） | 运行 Pi |
 | Pi（`@earendil-works/pi-coding-agent`）及它打包进去的 npm 依赖 | MIT，依赖里有 Apache-2.0、BSD-3-Clause、ISC、BlueOak-1.0.0、0BSD、Unlicense | 打工猫干活用的命令行 agent |
+| ripgrep（rg.exe） | Unlicense OR MIT | 盒子自带的搜索工具，猫和 Pi 搜代码内容用 |
+| fd（fd.exe） | MIT OR Apache-2.0 | 盒子自带的搜索工具，猫和 Pi 按文件名找文件用 |
 
-这些许可都允许再分发，条件是附上版权声明和许可全文——THIRD_PARTY_LICENSES.txt 就是做这件事的，exe 里也带着它。我们没有修改上面任何一个组件的源码。
-
-### pystray 和 LGPL-3.0
-
-pystray 是唯一的 LGPL 组件。我们这样遵守：
-
-- exe 里附带了 LGPL-3.0 和 GPL-3.0 全文（THIRD_PARTY_LICENSES.txt 的 pystray 一节）。
-- 我们没有改 pystray，用的是 PyPI 上的原版（版本见 THIRD_PARTY_LICENSES.txt），源码在 <https://github.com/moses-palmer/pystray> 和 PyPI 上都能拿到。
-- agentboxbox 的完整源码和打包脚本（`packaging/build_exe.ps1`）都是公开的。你可以换一个改过的 pystray，按 README「开发」一节重新打出 exe，这就是 LGPL 要求的「能用修改过的库重新组合」。
+这些许可都允许再分发，条件是附上版权声明和许可全文——THIRD_PARTY_LICENSES.txt 就是做这件事的，exe 里也带着它。我们没有修改上面任何一个组件的源码。托盘图标和菜单是自己写的（`boxbox/tray_win.py`，ctypes 直调 Windows 系统接口），exe 里没有 LGPL 组件。
 
 ## 不打包、你自己装的东西
 
@@ -51,4 +44,4 @@ Cursor、Claude、Codex、Kimi、GLM / 智谱、MiniMax、Grok、WorkBuddy、ZCo
 
 ---
 
-agentboxbox's own code is MIT-licensed. Full license texts for everything bundled in the exe are in `THIRD_PARTY_LICENSES.txt`. The pixel art, office scenes and animations are original and drawn by code in this repository; the app icon was generated with Grok (xAI) and is offered under MIT to the extent we hold rights in it. pystray (LGPL-3.0) is used unmodified; since the complete source and build script of agentboxbox are public, you can rebuild the exe with a modified pystray. All product names belong to their owners; no affiliation or endorsement is implied.
+agentboxbox's own code is MIT-licensed. Full license texts for everything bundled in the exe are in `THIRD_PARTY_LICENSES.txt`. The pixel art, office scenes and animations are original and drawn by code in this repository; the app icon was generated with Grok (xAI) and is offered under MIT to the extent we hold rights in it. All product names belong to their owners; no affiliation or endorsement is implied.

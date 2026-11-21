@@ -16,24 +16,13 @@ compute(dispatcher) -> list[dict]，每条：
 """
 from __future__ import annotations
 
-import datetime as _dt
-
 from . import config, i18n, leader_sessions
+from .dispatcher_util import _mins_since
 
 # 第 2 级的说法：todo 的 kind_code → 「A猫 的卡…了，首领在处理」（没开工 = 开工前被拦下，不算失败）
 LEVEL2_KEYS = {"failed": "failed", "blocked": "blocked", "returned": "returned",
                "reviewing": "reviewing", "interrupted": "interrupted", "unstarted": "unstarted",
                "maybe_stuck": "maybe_stuck"}
-
-
-def _mins_since(iso) -> float | None:
-    """距现在多少分钟；没给 / 解析不出来返回 None（= 从没来过，按沉默算）。"""
-    if not iso:
-        return None
-    try:
-        return (_dt.datetime.now().astimezone() - _dt.datetime.fromisoformat(str(iso))).total_seconds() / 60
-    except (TypeError, ValueError):
-        return None
 
 
 def compute(dispatcher) -> list[dict]:
@@ -78,9 +67,9 @@ def compute(dispatcher) -> list[dict]:
         if leader_n <= 0:                             # 这个首领没有待办时不算它没反应
             continue
         if leader == primary:
-            silent = _mins_since(d.leader_last_seen)
+            silent = _mins_since(d.leader_last_seen, None)
         else:
-            silent = _mins_since((states.get(leader) or {}).get("last_seen"))
+            silent = _mins_since((states.get(leader) or {}).get("last_seen"), None)
         if silent is None or silent >= wake:
             out.append({"level": 1, "kind": "leader_quiet", "station": leader, "task_id": None, "title": "",
                         "text": i18n.t("alert.leader_quiet", lg),

@@ -1,25 +1,61 @@
-/* 上岗流程 · 首领那几步：欢迎、招首领（起名选样子）、登记、等首领来报到。
+/* 上岗流程 · 首领那几步：欢迎（定位一句话）、第 1 步装进编程助手（页签 + 等它连上 + 已连上）、挑样子小窗。
    依赖 onboard-common.js（先加载）。 */
 (function () {
   "use strict";
   var NS = window.BXOB;
   var S = NS.S;
-  var $ = NS.$, esc = NS.esc, num = NS.num, api = NS.api, post = NS.post;
+  var esc = NS.esc, num = NS.num, api = NS.api, post = NS.post;
   var win = NS.win, catCard = NS.catCard, wireCat = NS.wireCat;
   var dget = NS.dget, draft = NS.draft;
 
-  /* 欢迎窗口先说「这是啥」再说「接下来干啥」，隐喻只留一句 */
+  /* 页签 / 流程条 / 小链接这一小块样式从 JS 注进 head（窗口的样式表不归这组文件管），只挂在 #bx-onboard 下 */
+  var CSS_DONE = false;
+  function injectCss() {
+    if (CSS_DONE) { return; }
+    CSS_DONE = true;
+    var s = document.createElement("style");
+    s.textContent = [
+      "#bx-onboard .ob-one{font-size:16px;font-weight:700;color:#2b1d12;margin:4px 0 6px}",
+      "#bx-onboard .ob-flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 4px}",
+      "#bx-onboard .ob-flow .n{border:2px solid #2b1d12;background:#f0e4c6;box-shadow:2px 2px 0 rgba(0,0,0,.25);",
+      "padding:2px 8px;font-size:12.5px;color:#2b1d12;font-weight:700}",
+      "#bx-onboard .ob-flow .a{color:#4a3728;font-size:12.5px}",
+      "#bx-onboard .ob-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}",
+      "#bx-onboard .ob-tab{padding:3px 10px;background:#6b4a2f;color:#fff8e7;border:2px solid #2b1d12;",
+      "box-shadow:2px 2px 0 rgba(0,0,0,.35);font-size:12.5px}",
+      "#bx-onboard .ob-tab:hover{background:#7d5836}",
+      "#bx-onboard .ob-tab.on{background:#3f9b4f;color:#fff}",
+      "#bx-onboard .ob-link{background:none;border:0;padding:0;color:#3b2a1a;font:inherit;font-size:12.5px;",
+      "text-decoration:underline;text-underline-offset:3px;cursor:pointer}"
+    ].join("");
+    document.head.appendChild(s);
+  }
+
+  /* 装进哪家：页签就是客户端；「其他」不记客户端 */
+  /* 名字从共用的客户端名字表（util.js）取，这里只定哪几家有页签 */
+  var TABS = ["cursor", "claude-code", "codex", ""].map(function (k) { return { key: k }; });
+  function labelOf(key) {
+    return key ? window.BXu.clientLabel(key) : NS.tx("lead.install.tabOther");
+  }
 
   /* ---------- 欢迎 ---------- */
   function stepWelcome() {
     return new Promise(function (res) {
+      injectCss();
       function paint() {
         var steps = [NS.tx("lead.welcome.step1"), NS.tx("lead.welcome.step2"), NS.tx("lead.welcome.step3")];
+        var flow = [["n", "lead.welcome.flow1"], ["a", "lead.welcome.flowA1"], ["n", "lead.welcome.flow2"],
+          ["a", "lead.welcome.flowA2"], ["n", "lead.welcome.flow3"]];
         var w = win({
-          title: "欢迎来到猫猫盒子：三步开工",
+          title: "欢迎来到猫猫盒子",
           titleKey: "lead.welcome.title",
-          body: "<p>" + esc(NS.tx("lead.welcome.intro")) + "</p><p class=\"lb\">" + esc(NS.tx("lead.welcome.next")) +
-            "</p><ol id=\"ob-intro-steps\">" + steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") +
+          body: '<p class="ob-one">' + esc(NS.tx("lead.welcome.one")) + "</p>" +
+            "<p>" + esc(NS.tx("lead.welcome.intro")) + "</p>" +
+            '<div class="ob-flow">' + flow.map(function (p) {
+              return '<span class="' + p[0] + '">' + esc(NS.tx(p[1])) + "</span>";
+            }).join("") + "</div>" +
+            '<p class="lb" style="margin-top:10px">' + esc(NS.tx("lead.welcome.next")) + "</p>" +
+            '<ol id="ob-intro-steps">' + steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") +
             "</ol>" + NS.langSwitch(),
           buttons: [{ text: NS.tx("lead.welcome.start"), main: true, on: function (x) { x.close(); res(); } }]
         });
@@ -30,345 +66,344 @@
     });
   }
 
-  /* ---------- 招募猫猫首领 ---------- */
-  function stepRecruitLeader() {
-    var no = num(dget("leader_cat"), 1);
-    var look = { cat: no, acc: dget("leader_acc", {}) };
-    S.leaderLook = look;
-    S.leaderName = String(dget("leader_name", NS.defaultLeaderName()));
-    return new Promise(function (res) {
-      var spec = { no: no, look: look };
-      var w = win({
-        title: "招募猫猫首领",
-        titleKey: "lead.recruit.title",
-        body: '<div class="grid2">' + catCard(no) +
-          '<div class="card"><label class="lb" for="ob-lead-name">' + esc(NS.tx("lead.recruit.nameLabel")) + "</label>" +
-          '<input id="ob-lead-name" type="text" maxlength="24" value="' + esc(S.leaderName) + '">' +
-          '<p class="hint">' + esc(NS.tx("lead.recruit.nameHint", { name: NS.defaultLeaderName() })) + "</p>" +
-          '<div class="msg hide" id="ob-lead-msg"></div></div></div>',
-        buttons: [{
-          text: NS.tx("common.next"), main: true, on: function (x) {
-            var v = (x.$("#ob-lead-name").value || "").trim();
-            if (!v) { x.msg("#ob-lead-msg", "fail", NS.tx("lead.recruit.nameEmpty")); return; }
-            S.leaderName = v;
-            draft({ leader_name: v, leader_cat: spec.no });
-            x.close();
-            res();
-          }
-        }]
-      });
-      wireCat(w, spec, function (s) { draft({ leader_cat: s.no }); });
-      NS.rerender = null;
-    });
+  /* ---------- 工位存取 ----------
+     进这一步就把编程助手的工位自动建好（默认名字和样子）；之后只在挑完样子 / 换页签时再存。
+     盒子不替用户改任何 AI 软件的设置：装进哪家由用户自己点、自己跑。 */
+  function leaderStation(client) {
+    return { id: S.leaderName, role: "leader", client: client, runner: "manual", enabled: true,
+      look: S.leaderLook, lang: NS.lang() };
   }
-
-  /* ---------- 首领接入方式 ----------
-     猫猫盒子不改用户电脑上任何 AI 软件的设置。这一步只登记首领；
-     下一步那段话里带着盒子的地址：首领先按地址直接连上干活，再问用户要不要把盒子
-     加进它所在软件的工具列表，用户同意了由那个软件里的 AI 自己加。 */
-  function stepLeaderAccess() {
-    return new Promise(function (res) {
-      var w = win({
-        title: "首领接入方式",
-        titleKey: "lead.access.title",
-        body: "<p>" + esc(NS.tx("lead.access.body1")) + "</p>" +
-          '<p class="hint" id="ob-no-touch">' + esc(NS.tx("lead.access.body2")) + "</p>" +
-          '<div class="msg wait" id="ob-mcp-msg">' + esc(NS.tx("lead.access.saving")) + "</div>",
-        buttons: [{
-          text: NS.tx("common.next"), main: true, on: function (x, btn) {
-            if (!x._done) { leaderAccessRun(x, btn); return; }   /* 上次没登记成：再试一次 */
-            x.close();
-            res();
-          }
-        }]
-      });
-      leaderAccessRun(w, null);
-      NS.rerender = null;
-    });
-  }
-  function leaderAccessRun(w, btn) {
-    btn = btn || w.$(".pxw-foot .pxb");   /* 第一次自动登记时也灰着：没登记完就点「下一步」会再登记一遍、窗口不往下走 */
-    if (btn) { btn.disabled = true; }
-    w.msg("#ob-mcp-msg", "wait", NS.tx("lead.access.saving"));
-    return saveLeader(w).then(function (ok) {
-      w._done = !!ok;
-      if (btn) { btn.disabled = false; }
-    }, function (e) {                 /* 核心没应答时按钮别一直灰着，说清楚、能再点 */
-      if (btn) { btn.disabled = false; }
-      w.msg("#ob-mcp-msg", "fail", NS.tx("lead.access.noSave",
-        { why: esc(String((e && e.message) || e || NS.tx("lead.access.unknown"))) }));
-    });
-  }
-  function saveLeader(w) {
-    /* 不猜用户用哪家软件：只沿用工位上已经记着的，新首领留空 */
-    var name = S.leaderName || dget("leader_name", "") || NS.defaultLeaderName();
-    var st = { id: name, role: "leader", client: String(dget("leader_client", "") || ""),
-      runner: "manual", enabled: true, look: S.leaderLook, lang: NS.lang() };
-    return post("/api/stations", st).then(function (r) {
-      if (!r.ok || !r.data.ok) {
-        var why = esc((r.data.errors || [r.data.text || NS.tx("lead.access.unknownWhy")])
-          .join(NS.tx("lead.common.listSep")));
-        w.msg("#ob-mcp-msg", "fail", NS.tx("lead.access.fail", { why: why }));
-        return false;
+  /* 存失败了在 msgSel 那个框里说清原因，旁边给「重试」；重试做的事记在 onSaveRetry（点按钮才触发） */
+  var onSaveRetry = null;
+  document.addEventListener("click", function (e) {
+    var b = e.target && e.target.closest ? e.target.closest("#ob-save-retry") : null;
+    if (b && onSaveRetry) { onSaveRetry(); }
+  });
+  function saveLeaderStation(client, msgSel, afterOk) {
+    return post("/api/stations", leaderStation(client)).then(function (r) {
+      var el = document.querySelector("#bx-onboard " + msgSel);
+      if (r.ok && r.data.ok) {
+        if (el) { el.className = "msg hide"; }
+        if (afterOk) { afterOk(); }
+        return true;
       }
-      w.msg("#ob-mcp-msg", "ok", NS.tx("lead.access.ok", { name: esc(name) }));
-      return true;
+      if (!el) { return false; }
+      var why = esc((r.data.errors || [r.data.text || NS.tx("lead.install.unknownWhy")])
+        .join(NS.tx("lead.common.listSep")));
+      el.className = "msg fail";
+      el.innerHTML = NS.tx("lead.install.saveFail", { why: why }) +
+        ' <button type="button" class="pxb small" id="ob-save-retry">' + esc(NS.tx("lead.install.retry")) + "</button>";
+      onSaveRetry = function () { saveLeaderStation(client, msgSel, afterOk); };
+      return false;
     });
   }
 
-  /* ---------- 连接三栏 ----------
-     ① 复制前先说清楚贴到哪（第 0 步）；复制后马上展开「你现在做这三步」；
-     ② 45 秒没等到首领就给排查清单；20 秒先查一次客户端那边的开关（Cursor 把 boxbox 关了是最常见的卡点）；
-     ③ 首领绕路（HTTP）来的，直接在窗里说「AI 软件还没挂上盒子」，不靠模型转告。主文案不出现内部接口词。 */
-  function stepLeaderConnect() {
+  /* ---------- 第 1 步：装进你的编程助手 ---------- */
+  function stepInstallLeader() {
     return new Promise(function (res) {
-      var prompt = "";
-      var w = win({
-        title: "接首领",
-        titleKey: "lead.connect.title",
-        body: '<p class="hint" id="ob-prep" style="margin:10px 0 8px">' + esc(NS.tx("lead.connect.prep")) + "</p>" +
-          '<div class="tri">' +
-          '<div class="card"><div class="step">1</div><h3>' + esc(NS.tx("lead.connect.step1")) + "</h3>" +
-          '<p class="hint">' + esc(NS.tx("lead.connect.step1Hint")) + "</p>" +
-          '<p class="lb" id="ob-prompt-peek">' + esc(NS.tx("lead.connect.generating")) + "</p>" +
-          '<details id="ob-prompt-box"><summary>' + esc(NS.tx("lead.connect.showAll")) +
-          '</summary><pre id="ob-prompt">' + esc(NS.tx("lead.connect.generating")) + "</pre></details>" +
-          '<button type="button" class="pxb small hide" id="ob-prompt-retry">' + esc(NS.tx("lead.connect.retry")) + "</button>" +
-          '<button type="button" class="pxb main" id="ob-copy-prompt">' + esc(NS.tx("lead.connect.copyThis")) + "</button>" +
-          '<ol class="hide" id="ob-todo3"><li>' + esc(NS.tx("lead.connect.todo1")) + "</li><li>" +
-          esc(NS.tx("lead.connect.todo2")) + "</li><li>" + esc(NS.tx("lead.connect.todo3")) + "</li></ol></div>" +
+      injectCss();
+      var client = String(dget("leader_client", ""));
+      var tab = TABS.some(function (t) { return t.key === client && client; }) ? client : "cursor";
+      draft({ leader_client: tab });   /* 记住停在哪家：收尾窗口给不给 Cursor 派活按钮看它 */
+      var t0 = Date.now(), timer = null, hinted = false, checked = false, stopped = false;
+      if (dget("leader_cat") != null) {
+        S.leaderLook = { cat: num(dget("leader_cat"), 1), acc: dget("leader_acc", {}) };
+      }
+      S.leaderName = String(dget("leader_name", "")) || S.leaderName || NS.defaultLeaderName();
 
-          '<div class="card" id="ob-wait"><div class="step">2</div><h3>' + esc(NS.tx("lead.connect.step2")) + "</h3>" +
-          '<canvas class="av" width="96" height="96"></canvas>' +
-          '<p><span class="dots"><span></span><span></span><span></span></span> <span id="ob-wait-t">' +
-          esc(NS.tx("lead.connect.waited", { n: waitedText(0) })) + "</span></p>" +
-          '<p class="hint">' + esc(NS.tx("lead.connect.waitHint")) + "</p></div>" +
+      function q(s) { return document.querySelector("#bx-onboard " + s); }
+      function waitedText(s) {
+        return s < 60 ? NS.tx("lead.install.waitedSec", { n: s })
+          : NS.tx("lead.install.waitedMin", { n: Math.floor(s / 60) });
+      }
 
-          '<div class="card hide done" id="ob-ok"><div class="step">3</div><h3>' +
-          esc(NS.tx("lead.connect.step3", { name: S.leaderName })) + "</h3>" +
-          "<p>" + esc(NS.tx("lead.connect.arrived")) + "</p>" +
-          '<button type="button" class="pxb main" id="ob-next">' + esc(NS.tx("lead.connect.nextBtn")) + "</button></div></div>" +
-          /* 排查清单放三栏下面一整行：塞在中间那栏里太窄，一展开窗口就比 exe 窗口高 */
-          '<div id="ob-late-wrap">' +
-          '<div class="msg hide" id="ob-wait-late"></div>' +
-          '<div class="hide" id="ob-late-btns" style="margin-top:8px">' +
-          '<button type="button" class="pxb small" id="ob-again">' + esc(NS.tx("lead.connect.recopy")) + "</button> " +
-          '<button type="button" class="pxb small" id="ob-help">' + esc(NS.tx("lead.connect.checkApp")) + "</button></div>" +
-          '<div class="card hide" id="ob-help-box" style="margin-top:10px"></div></div>'
-      });
-      NS.rerender = null;
-      NS.drawCat(w.$("#ob-wait canvas"), { cat: S.leaderLook.cat, lead: true });
-      var copyBtn = w.$("#ob-copy-prompt"), retryBtn = w.$("#ob-prompt-retry");
-      copyBtn.onclick = function () { NS.copyText(prompt, this); w.$("#ob-todo3").classList.remove("hide"); };
-      w.$("#ob-again").onclick = function () { NS.copyText(prompt, this); };
-      w.$("#ob-next").onclick = function () { stop(); w.close(); res(); };
-      w.$("#ob-help").onclick = function () { showHelp(w); };
+      function paint() {
+        var tabs = '<div class="ob-tabs" id="ob-tabs">' + TABS.map(function (t) {
+          return '<button type="button" class="ob-tab' + (t.key === tab ? " on" : "") +
+            '" data-tab="' + t.key + '">' + esc(labelOf(t.key)) + "</button>";
+        }).join("") + "</div>";
+        var w = win({
+          title: "第 1 步：装进你的编程助手",
+          titleKey: "lead.install.title",
+          body: '<p class="hint" id="ob-prep" style="margin:10px 0 8px">' + esc(NS.tx("lead.install.prep")) + "</p>" +
+            '<div class="tri">' +
+            '<div class="card"><div class="step">1</div><h3>' + esc(NS.tx("lead.install.step1")) + "</h3>" + tabs +
+            '<div id="ob-ins-body"></div><div class="msg hide" id="ob-ins-msg"></div></div>' +
+            '<div class="card" id="ob-wait"><div class="step">2</div><h3>' + esc(NS.tx("lead.install.step2")) + "</h3>" +
+            '<canvas class="av" width="96" height="96"></canvas>' +
+            '<p><span class="dots"><span></span><span></span><span></span></span> <span id="ob-wait-t"></span></p>' +
+            '<p class="hint">' + esc(NS.tx("lead.install.waitHint")) + "</p>" +
+            '<p class="hint"><button type="button" class="ob-link" id="ob-look">' +
+            esc(NS.tx("lead.install.lookLink")) + "</button></p></div>" +
+            '<div class="card hide done" id="ob-ok"><div class="step">3</div><h3 id="ob-ok-t"></h3>' +
+            "<p>" + esc(NS.tx("lead.install.okBody")) + "</p>" +
+            '<button type="button" class="pxb main" id="ob-next">' + esc(NS.tx("lead.install.nextBtn")) +
+            "</button></div></div>" +
+            '<div id="ob-late-wrap">' +
+            '<div class="msg hide" id="ob-wait-late"></div>' +
+            '<div class="hide" id="ob-late-btns" style="margin-top:8px">' +
+            '<button type="button" class="pxb small" id="ob-help">' + esc(NS.tx("lead.install.checkApp")) +
+            "</button></div>" +
+            '<div class="card hide" id="ob-help-box" style="margin-top:10px"></div></div>'
+        });
+        NS.rerender = null;
+        NS.drawCat(w.$("#ob-wait canvas"), { cat: S.leaderLook.cat, acc: S.leaderLook.acc, lead: true });
+        w.$$("#ob-tabs .ob-tab").forEach(function (b) {
+          b.onclick = function () {
+            tab = b.getAttribute("data-tab");
+            w.$$("#ob-tabs .ob-tab").forEach(function (x) { x.classList.toggle("on", x === b); });
+            draft({ leader_client: tab });
+            saveLeaderStation(tab, "#ob-ins-msg", loadInstall);
+            loadInstall();
+          };
+        });
+        w.$("#ob-look").onclick = function () { pickLeaderLook(tab).then(paint); };
+        w.$("#ob-next").onclick = function () { stop(); w.close(); res(); };
+        w.$("#ob-help").onclick = showHelp;
+        loadInstall();
+        apply();
+      }
 
-      function loadPrompt() {          /* ① 栏那段话：先说「正在生成…」，读到就填进去，读不到说清原因并能重试 */
-        w.$("#ob-prompt").textContent = NS.tx("lead.connect.generating");
-        w.$("#ob-prompt-peek").textContent = NS.tx("lead.connect.generating");
-        retryBtn.classList.add("hide");
-        copyBtn.disabled = true;
-        return api("/api/summon/" + encodeURIComponent(S.leaderName) + NS.langParam()).then(function (r) {
+      /* 第 1 栏：按页签给一键装 / 安装命令 / 配置片段。读失败能重试 */
+      function loadInstall() {
+        var box = q("#ob-ins-body");
+        if (!box) { return; }
+        var msg = q("#ob-ins-msg");
+        if (msg) { msg.className = "msg hide"; }
+        box.innerHTML = '<p class="hint">' + esc(NS.tx("lead.install.loading")) + "</p>";
+        /* 「其他」给通用 JSON 片段：这几家 snippet 型客户端的片段一个样，取一家的就行 */
+        var ask = tab || "kimi-code";
+        api("/api/connectors/snippet?client=" + encodeURIComponent(ask) +
+          "&station=" + encodeURIComponent(S.leaderName) + NS.langParam2()).then(function (r) {
+          if (!box.isConnected) { return; }
           var d = r.data || {};
-          if (!r.ok || !d.prompt) {
-            var why = NS.tx("lead.connect.promptFail", { why: d.text || d.code || NS.tx("lead.connect.down") });
-            w.$("#ob-prompt").textContent = why;
-            w.$("#ob-prompt-peek").textContent = why;
-            retryBtn.classList.remove("hide");
+          if (!r.ok || !d.snippet) {
+            box.innerHTML = '<p class="hint">' + esc(NS.tx("lead.install.loadFail",
+              { why: d.text || d.code || NS.tx("lead.install.down") })) + "</p>" +
+              '<button type="button" class="pxb small" id="ob-ins-retry">' + esc(NS.tx("lead.install.retry")) + "</button>";
+            var rb = document.getElementById("ob-ins-retry");
+            if (rb) { rb.onclick = loadInstall; }
             return;
           }
-          prompt = d.prompt;
-          w.$("#ob-prompt").textContent = prompt;
-          /* 主路径只露第一句（里面没有工具名、地址），全文收在「看全文」里 */
-          w.$("#ob-prompt-peek").textContent = NS.tx("lead.connect.peekCount",
-            { first: firstSentence(prompt), n: prompt.length });
-          w._help = d;
-          copyBtn.disabled = false;
+          if (tab === "cursor") {
+            box.innerHTML = '<p><a class="pxb main" id="ob-install-btn" href="' + esc(d.install_link || "#") + '">' +
+              esc(NS.tx("lead.install.cursorBtn")) + "</a></p>" +
+              '<p class="hint">' + esc(NS.tx("lead.install.cursorHint")) + "</p>";
+          } else if (d.install_cmd) {
+            box.innerHTML = '<p class="hint">' + esc(NS.tx("lead.install.cmdHint")) + "</p>" +
+              "<pre>" + esc(d.install_cmd) + "</pre>" +
+              '<button type="button" class="pxb small" id="ob-copy-cmd">' + esc(NS.tx("lead.install.copyCmd")) + "</button>";
+            var cb = document.getElementById("ob-copy-cmd");
+            if (cb) { cb.onclick = function () { NS.copyText(d.install_cmd, cb); }; }
+          } else {
+            box.innerHTML = '<p class="hint">' + esc(NS.tx("lead.install.otherHint")) + "</p>" +
+              "<pre>" + esc(d.snippet) + "</pre>" +
+              '<button type="button" class="pxb small" id="ob-copy-cmd">' + esc(NS.tx("lead.install.copySnippet")) +
+              "</button>";
+            var cb2 = document.getElementById("ob-copy-cmd");
+            if (cb2) { cb2.onclick = function () { NS.copyText(d.snippet, cb2); }; }
+          }
         });
       }
-      retryBtn.onclick = loadPrompt;
-      loadPrompt();
 
-      var t0 = Date.now(), timer = null;
-      function waitedText(s) {
-        return s < 60 ? NS.tx("lead.connect.waitedSec", { n: s }) : NS.tx("lead.connect.waitedMin", { n: Math.floor(s / 60) });
+      /* 三栏跟着状态走：没握手等第 2 栏，握过手亮第 3 栏 */
+      function apply() {
+        var wait = q("#ob-wait"), ok = q("#ob-ok");
+        if (!wait || !ok) { return; }
+        var connected = !!(S.state && S.state.leader && !S.state.leader_unshaken);
+        wait.classList.toggle("hide", connected);
+        var late = q("#ob-late-wrap");
+        if (late) { late.classList.toggle("hide", connected); }
+        ok.classList.toggle("hide", !connected);
+        if (connected) {
+          q("#ob-ok-t").textContent = tab ? NS.tx("lead.install.okTitle", { app: labelOf(tab) })
+            : NS.tx("lead.install.okAny");
+          if (S.state.leader_link === "http" && !q("#ob-via-http")) {
+            var v = document.createElement("div");
+            v.className = "msg wait";
+            v.id = "ob-via-http";
+            v.innerHTML = NS.tx("lead.install.viaHttp");
+            ok.insertBefore(v, q("#ob-next"));
+          }
+          return;
+        }
+        var wt = q("#ob-wait-t");
+        if (wt) { wt.textContent = NS.tx("lead.install.waited", { n: waitedText(Math.floor((Date.now() - t0) / 1000)) }); }
       }
-      function waited() { return waitedText(Math.floor((Date.now() - t0) / 1000)); }
       function tick() {
         return api("/api/onboard/state").then(function (r) {
           if (!r.ok) { return; }
           S.state = r.data;
-          if (!r.data.leader_unshaken) {          /* 核心真的检测到首领来握过手，才显示「已连接」 */
-            w.$("#ob-wait").classList.add("hide");
-            w.$("#ob-late-wrap").classList.add("hide");   /* 连上了，排查清单收起来 */
-            w.$("#ob-ok").classList.remove("hide");
-            if (r.data.leader_link === "http") {  /* 首领是绕路来的——AI 软件里还没挂上盒子，直接告诉用户，不指望模型转告 */
-              var via = document.createElement("div");
-              via.className = "msg wait";
-              via.id = "ob-via-http";
-              via.innerHTML = NS.tx("lead.connect.viaHttp");
-              w.$("#ob-ok").insertBefore(via, w.$("#ob-next"));
-            }
-            stop();
-            return;
+          apply();
+          if (r.data.leader && !r.data.leader_unshaken) { stop(); return; }   /* 核心真检测到握手才亮「已连上」 */
+          if (Date.now() - t0 > NS.LEADER_CHECK_MS && !checked) {   /* 20 秒先查一次 Cursor 的开关 */
+            checked = true;
+            checkClients(false);
           }
-          var t = w.$("#ob-wait-t");
-          if (t) { t.textContent = NS.tx("lead.connect.waited", { n: waited() }); }
-          if (Date.now() - t0 > NS.LEADER_CHECK_MS && !w._checked) {   /* 先查一次 Cursor 是不是把 boxbox 关了 */
-            w._checked = true;
-            checkClients(w, false);
-          }
-          if (Date.now() - t0 > NS.LEADER_HINT_MS && !w._hinted) {     /* 45 秒还没来：给排查清单，继续等 */
-            w._hinted = true;
-            if (!w._cursorOff) {
-              w.msg("#ob-wait-late", "fail", NS.tx("lead.connect.lateTitle") +
-                "<ol><li>" + NS.tx("lead.connect.late1") + "</li><li>" + NS.tx("lead.connect.late2") + "</li><li>" +
-                NS.tx("lead.connect.late3") + "</li><li>" + NS.tx("lead.connect.late4") + "</li></ol>");
+          if (Date.now() - t0 > NS.LEADER_HINT_MS && !hinted) {     /* 45 秒还没来：给排查清单，接着等 */
+            hinted = true;
+            if (!S._cursorOff) {
+              var m = q("#ob-wait-late");
+              if (m) {
+                m.className = "msg fail";
+                m.innerHTML = NS.tx("lead.install.lateTitle") + "<ol><li>" + NS.tx("lead.install.late1") + "</li><li>" +
+                  NS.tx("lead.install.late2") + "</li><li>" + NS.tx("lead.install.late3") + "</li><li>" +
+                  NS.tx("lead.install.late4") + "</li></ol>";
+              }
             }
-            w.$("#ob-late-btns").classList.remove("hide");
+            var b = q("#ob-late-btns");
+            if (b) { b.classList.remove("hide"); }
           }
         });
       }
-      function stop() { if (timer) { clearInterval(timer); timer = null; } }
-      function showHelp(x) {
-        var d = x._help || {};
-        x.$("#ob-help-box").innerHTML =
-          "<p class=\"lb\">" + esc(NS.tx("lead.connect.helpWhere",
-            { where: d.where || NS.tx("lead.connect.helpWhereDefault") })) + "</p>" +
-          ((d.steps || []).length ? "<ol>" + d.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>" : "") +
-          '<p class="hint" id="ob-help-check">' + esc(NS.tx("lead.connect.helpChecking")) + "</p>";
-        x.$("#ob-help-box").classList.remove("hide");
-        checkClients(x, true);
-      }
-      function checkClients(x, verbose) {   /* 最常见的卡点是 Cursor 把 boxbox 关了——查到就直说怎么开 */
+      function stop() { stopped = true; if (timer) { clearInterval(timer); timer = null; } }
+      function checkClients(verbose) {   /* 最常见的卡点是 Cursor 把 boxbox 关了——查到就直说怎么开 */
         return api("/api/connectors/check?station=" + encodeURIComponent(S.leaderName)).then(function (r) {
           var d = r.data || {};
-          var el = x.$("#ob-help-check");
           if (d.cursor_disabled) {
-            x._cursorOff = true;
-            x.msg("#ob-wait-late", "fail", NS.tx("lead.connect.appSwitchOff"));
-            x.$("#ob-late-btns").classList.remove("hide");
+            S._cursorOff = true;
+            var m = q("#ob-wait-late");
+            if (m) { m.className = "msg fail"; m.innerHTML = NS.tx("lead.install.appSwitchOff"); }
+            var b = q("#ob-late-btns");
+            if (b) { b.classList.remove("hide"); }
           }
-          if (el && verbose) {   /* 不猜你用哪家：猫猫盒子不写别的软件的设置，查完只说下一步怎么办 */
-            el.innerHTML = d.cursor_disabled ? "" : NS.tx("lead.connect.helpOk");
-          }
+          var el = q("#ob-help-check");
+          if (el && verbose) { el.innerHTML = d.cursor_disabled ? "" : NS.tx("lead.install.helpOk"); }
         }).catch(function () { /* 查不到就算了，不挡等待 */ });
       }
-      tick().then(function () { timer = setInterval(tick, NS.POLL_MS); });
+      function showHelp() {
+        var box = q("#ob-help-box");
+        if (!box) { return; }
+        box.innerHTML = '<p class="lb">' + esc(NS.tx("lead.install.helpTitle")) + "</p>" +
+          '<p class="hint" id="ob-help-check">' + esc(NS.tx("lead.install.helpChecking")) + "</p>";
+        box.classList.remove("hide");
+        checkClients(true);
+      }
+
+      paint();
+      saveLeaderStation(tab, "#ob-ins-msg", loadInstall);
+      if (!timer && !stopped) {
+        tick().then(function () { if (!timer && !stopped) { timer = setInterval(tick, NS.POLL_MS); } });
+      }
     });
   }
 
-  /* 主路径只露第一句：中文按「。」断，英文按句号断 */
-  function firstSentence(p) {
-    return NS.lang() === "en" ? p.split(". ")[0] : p.split("。")[0];
+  /* ---------- 给它挑个样子（可跳过） ---------- */
+  function pickLeaderLook(client) {
+    return new Promise(function (res) {
+      var look = { cat: num(dget("leader_cat"), (S.leaderLook || {}).cat || 1),
+        acc: dget("leader_acc", (S.leaderLook || {}).acc || {}) };
+      var w = win({
+        title: "给它挑个样子",
+        titleKey: "lead.look.title",
+        body: '<div class="grid2">' + catCard(look.cat,
+          '<div class="adv-acc"><button type="button" class="pxb small" id="ob-acc">' +
+          esc(NS.tx("lead.look.acc")) + "</button></div>") +
+          '<div class="card"><p class="lb">' + esc(NS.tx("lead.look.note")) + "</p>" +
+          '<p class="hint">' + esc(NS.tx("lead.look.crownNote")) + "</p>" +
+          '<div class="msg hide" id="ob-look-msg"></div></div></div>',
+        buttons: [{
+          text: NS.tx("lead.look.ok"), main: true, on: function (x) {
+            S.leaderLook = look;
+            draft({ leader_cat: look.cat, leader_acc: look.acc });
+            saveLeaderStation(client, "#ob-look-msg", function () { x.close(); res(); });
+          }
+        }, { text: NS.tx("lead.look.skip"), small: true, on: function (x) { x.close(); res(); } }]
+      });
+      var spec = { no: look.cat, look: look };
+      wireCat(w, spec, null);
+      w.$("#ob-acc").onclick = function () {         /* 换一套配饰：重新随机 0–3 件 */
+        look.acc = NS.randomAcc();
+        wireCat(w, spec, null);
+      };
+    });
   }
 
   NS.stepWelcome = stepWelcome;
-  NS.stepRecruitLeader = stepRecruitLeader;
-  NS.stepLeaderAccess = stepLeaderAccess;
-  NS.stepLeaderConnect = stepLeaderConnect;
+  NS.stepInstallLeader = stepInstallLeader;
+  NS.pickLeaderLook = pickLeaderLook;
 })();
 
 /* ================= 这一份文件的文案（中文 / 英文） ================= */
 window.BXOB.addTxt("lead", {
-    'access.body1': [
-      '首领住在你常用的 AI 软件（Cursor、Claude Code、Codex 等都行）的对话里。下一步你复制一段话贴进去，里面的 AI 就成了首领，会直接连上猫猫盒子开始干活。',
-      'The leader lives in a chat in your AI app (Cursor, Claude Code, Codex — any of them). ' +
-        'Next you paste a text there; ' +
-        'the AI in that chat becomes the leader and connects to agentboxbox to work.'
-    ],
-    'access.body2': [
-      '猫猫盒子不会改你电脑上任何软件的设置。想让首领下次更顺手，它会先问你要不要把盒子加进它的工具列表，你同意了它自己加。',
-      'agentboxbox does not change the settings of any app on your computer. ' +
-        'To make the next round smoother, ' +
-        'the leader will first ask whether agentboxbox may join its tool list; ' +
-        'if you say yes, it adds it itself.'
-    ],
-    'access.fail': ['登记失败：{why}。点「下一步」重试。', 'Could not register: {why}. Click Next to try again.'],
-    'access.noSave': ['没保存上：{why}。点「下一步」重试。', 'Could not save: {why}. Click Next to try again.'],
-    'access.ok': ['首领「{name}」登记好了。点「下一步」拿那段话。', 'Leader “{name}” is registered. Click Next to get the text.'],
-    'access.saving': ['正在登记首领…', 'Registering the leader…'],
-    'access.title': ['首领接入方式', 'How the leader connects'],
-    'access.unknown': ['猫猫盒子没应答', 'no answer from the box'],
-    'access.unknownWhy': ['未知原因', 'unknown reason'],
-    'connect.appSwitchOff': [
-      '你常用的 AI 软件里 boxbox 的开关可能是关着的，所以对话里用不上盒子的工具。到那边的设置里找到工具列表那一栏，把 boxbox 打开，再新开一个对话贴那段话。' +
-        '（不打开也行：首领会按地址直接连上。）',
-      'The boxbox switch in your AI app may be off, so the chat cannot use the box tools. ' +
-        'Open that app\'s settings, find the tool list and turn boxbox on, ' +
-        'then start a new chat and paste the text. ' +
-        '(It also works with the switch off: the leader connects by address.)'
-    ],
-    'connect.arrived': ['首领来报到了。', 'The leader checked in.'],
-    'connect.checkApp': ['查一下 AI 软件那边', 'Check your AI app'],
-    'connect.copyThis': ['复制这段话', 'Copy this text'],
-    'connect.down': ['猫猫盒子没应答', 'agentboxbox did not answer'],
-    'connect.generating': ['正在生成…', 'Working…'],
-    'connect.helpChecking': ['正在查 AI 软件那边…', 'Checking your AI app…'],
-    'connect.helpOk': [
-      '那段话整段贴进去、发送了，AI 就会按地址连过来。还不行的话：确认猫猫盒子开着，新开一个对话再贴一次。',
-      'Paste the whole text and send it — the AI connects by address. ' +
-        'If that does not work: check that agentboxbox is running, ' +
-        'start a new chat and paste it again.'
-    ],
-    'connect.helpWhere': ['贴到哪里：{where}', 'Where to paste: {where}'],
-    'connect.helpWhereDefault': ['你常用的 AI 软件里的新对话', 'a new chat in your AI app'],
-    'connect.late1': ['是在 AI 软件里<b>新开</b>的对话吗？', 'Did you start a <b>new</b> chat in your AI app?'],
-    'connect.late2': ['整段贴进去、<b>发送</b>了吗？', 'Did you paste the whole text and hit <b>send</b>?'],
-    'connect.late3': [
-      'AI 回话说找不到盒子的工具？没关系，那段话里带着地址，它会按地址直接连过来，多等一会儿。',
-      'Did the AI say it cannot find the box tools? Never mind: the text carries the address, ' +
-        'so it connects straight to it — just wait a bit longer.'
-    ],
-    'connect.late4': ['猫猫盒子还开着吗？（任务栏右下角有猫的图标）', 'Is agentboxbox still open? (look for the cat icon in the system tray)'],
-    'connect.lateTitle': ['还没等到首领。对一下这几件事：', 'The leader has not shown up. Check these:'],
-    'connect.nextBtn': ['下一步', 'Next'],
-    'connect.peekCount': ['「{first}……」共 {n} 字', '“{first}…” — {n} characters'],
-    'connect.prep': ['先打开你常用的 AI 软件，新开一个对话。', 'Open your AI app and start a new chat.'],
-    'connect.promptFail': ['没读到这段话：{why}', 'Could not read that text: {why}'],
-    'connect.recopy': ['重新复制', 'Copy again'],
-    'connect.retry': ['重试', 'Try again'],
-    'connect.showAll': ['看全文', 'Show all'],
-    'connect.step1': ['复制这段话', 'Copy this text'],
-    'connect.step1Hint': ['这段是写给 AI 看的，不用读，整段复制过去就行。', 'This text is for the AI. You do not need to read it, just copy all of it.'],
-    'connect.step2': ['等首领来报到…', 'Waiting for the leader…'],
-    'connect.step3': ['「{name}」已连接！', '“{name}” is connected!'],
-    'connect.title': ['接首领', 'Connect the leader'],
-    'connect.todo1': ['在 AI 软件里新开一个对话', 'Start a new chat in your AI app'],
-    'connect.todo2': ['粘贴、发送', 'Paste and send'],
-    'connect.todo3': ['回来看这里：首领连上了，第 3 栏会变成「已连接」', 'Come back here: when the leader connects, the third box says “Connected”'],
-    'connect.viaHttp': [
-      '首领是按地址直接连上的，照样能干活。它会在对话里问你要不要把猫猫盒子加进它的工具列表：同意的话它自己加，下次新开对话就更顺；不同意也没关系，每次照样按地址连。',
-      'The leader connected straight to the address and can work just fine. ' +
-        'It will ask in the chat whether agentboxbox may join its tool list: if you say yes it ' +
-        'adds it and the next chat is smoother; if not, it still connects by address every time.'
-    ],
-    'connect.waitHint': ['它真的连上盒子了，这里才会变。', 'This only changes once the leader really connects.'],
-    'connect.waited': ['已等 {n}', 'Waited {n}'],
-    'connect.waitedSec': ['{n} 秒', '{n} s'],
-    'connect.waitedMin': ['{n} 分钟', '{n} min'],
     'common.listSep': ['；', '; '],
+    'install.appSwitchOff': [
+      'Cursor 里 boxbox 的开关是关着的，所以连不上。到 Cursor 的设置里把 boxbox 打开，这里会自己变绿。',
+      'The agentboxbox switch in Cursor is off, so it cannot connect. ' +
+        'Turn agentboxbox on in Cursor\'s settings and this turns green on its own.'
+    ],
+    'install.checkApp': ['查一下 AI 软件那边', 'Check your AI app'],
+    'install.cmdHint': ['在终端里运行这一条：', 'Run this one line in the terminal:'],
+    'install.copyCmd': ['复制命令', 'Copy the command'],
+    'install.copySnippet': ['复制这段配置', 'Copy this config'],
+    'install.cursorBtn': ['一键装进 Cursor', 'Install into Cursor'],
+    'install.cursorHint': ['Cursor 会问要不要启用 boxbox，点「启用」。',
+      'Cursor will ask whether to enable agentboxbox — click Enable.'],
+    'install.down': ['猫猫盒子没应答', 'agentboxbox did not answer'],
+    'install.helpChecking': ['正在查 Cursor 那边…', 'Checking Cursor…'],
+    'install.helpOk': [
+      '那边是开着的。还不行的话：在 Cursor 的设置里把 boxbox 关掉再打开一次。',
+      'It is on. If it still does not connect, turn agentboxbox off and on again in Cursor\'s settings.'
+    ],
+    'install.helpTitle': ['查 Cursor 里 boxbox 的开关', 'Check the agentboxbox switch in Cursor'],
+    'install.late1': ['装进去了吗：上面的按钮点了，或命令跑了', 'Did the install finish — the button above clicked, or the command run'],
+    'install.late2': ['在它的设置里，boxbox 是开着的吗', 'Is agentboxbox switched on in its settings'],
+    'install.late3': ['终端里装的：新开一个会话，它才会来连', 'Installed from the terminal: start a new session so it connects'],
+    'install.late4': ['猫猫盒子还开着吗', 'Is agentboxbox still open'],
+    'install.lateTitle': ['还没连上。对一下这几件事：', 'Not connected yet. Check these:'],
+    'install.loadFail': ['没读到：{why}', 'Could not read it: {why}'],
+    'install.loading': ['正在读…', 'Reading…'],
+    'install.lookLink': ['给它挑个样子', 'Pick a look for it'],
+    'install.nextBtn': ['下一步：加一个帮手', 'Next: add a helper'],
+    'install.okAny': ['连上了', 'Connected'],
+    'install.okBody': [
+      '不用先做别的。以后在它的任何一个对话里说「派给帮手」就行。',
+      'Nothing else to set up. From now on, say “hand it to the helpers” in any of its chats.'
+    ],
+    'install.okTitle': ['{app} 连上了', '{app} is connected'],
+    'install.otherHint': [
+      '把这段配置放进你的编程助手的配置里，名字叫 boxbox。',
+      'Put this into your coding assistant\'s config, keeping the entry name as shown.'
+    ],
+    'install.prep': ['命令和按钮都由你自己点，盒子不改你的软件设置。', 'Every command and button is yours to click — the box never touches your app settings.'],
+    'install.retry': ['重试', 'Try again'],
+    'install.saveFail': ['工位没登记上：{why}', 'Could not register the station: {why}'],
+    'install.step1': ['装进你在用的那个', 'Install into the one you use'],
+    'install.step2': ['等它连上', 'Waiting for it to connect'],
+    'install.tabOther': ['其他', 'Other'],
+    'install.title': ['第 1 步：装进你的编程助手', 'Step 1: Install into your coding assistant'],
+    'install.unknownWhy': ['未知原因', 'unknown reason'],
+    'install.viaHttp': [
+      '它是按地址直接连上的，照样能干活。第一步装好以后，新开对话会自动连上。',
+      'It connected straight to the address and works fine. Once step 1 is installed, new chats connect on their own.'
+    ],
+    'install.waitHint': ['装好它就会自己连上，这里会变绿，不用在对话里说话。',
+      'Once installed it connects on its own and this turns green. No need to type anything in its chat.'],
+    'install.waited': ['已等 {n}', 'Waited {n}'],
+    'install.waitedMin': ['{n} 分钟', '{n} min'],
+    'install.waitedSec': ['{n} 秒', '{n} s'],
+    'look.acc': ['换一套配饰', 'Shuffle the extras'],
+    'look.crownNote': ['王冠不用挑：它上岗的时候就戴上了。', 'No crown to pick — it gets one when it starts work.'],
+    'look.note': ['换到喜欢的为止，点「好了」保存。', 'Shuffle until you like it, then click Done.'],
+    'look.ok': ['好了', 'Done'],
+    'look.skip': ['先不换了', 'Not now'],
+    'look.title': ['给它挑个样子', 'Pick a look for it'],
     'recruit.defaultLeader': ['猫猫首领', 'Boss'],
-    'recruit.nameEmpty': ['给首领起个名字吧', 'Give the leader a name'],
-    'recruit.nameHint': [
-      '默认「{name}」，可改；工号 001。王冠等上岗的时候才戴上。',
-      'Default: “{name}” (you can change it). Badge No. 001. The crown goes on once it starts work.'
-    ],
-    'recruit.nameLabel': ['首领的名字', 'Leader name'],
-    'recruit.title': ['招募猫猫首领', 'Hire a leader'],
+    'welcome.flow1': ['你的编程助手', 'Your coding assistant'],
+    'welcome.flow2': ['帮手们', 'The helpers'],
+    'welcome.flow3': ['你的会话', 'Your chat'],
+    'welcome.flowA1': ['— 派活 →', '— dispatch →'],
+    'welcome.flowA2': ['— 做完交回 →', '— results back →'],
     'welcome.intro': [
-      '猫猫盒子是装在这台电脑上的一间猫猫办公室：首领派活、打工猫干活，你在旁边看着。',
-      'agentboxbox is a cat office on this computer: the leader hands out cards, ' +
-        'the worker cats do them, you watch.'
+      '你原来怎么用编程助手还怎么用。它想把活分出去时，派给这里的帮手，几个帮手同时做，做完交回你的会话。',
+      'Keep using your coding assistant as you always have. When it wants to hand work out, ' +
+        'it sends it to the helpers here — several run at once, and the results come back to your chat.'
     ],
-    'welcome.next': ['接下来三步，十来分钟：', 'Three steps, about ten minutes:'],
+    'welcome.next': ['三步开工：', 'Three steps to start:'],
+    'welcome.one': ['给你的 AI 编程助手配几个帮手。', 'A few helpers for your AI coding assistant.'],
     'welcome.start': ['开始', 'Start'],
-    'welcome.step1': ['招一位首领（起个名字、挑个样子）', 'Hire a leader (give it a name and a look)'],
-    'welcome.step2': [
-      '复制一段话，贴进你常用的 AI 软件（Cursor、Claude Code、Codex 等）的新对话',
-      'Copy a text and paste it into a new chat in your AI app (Cursor, Claude Code, Codex, …)'
-    ],
-    'welcome.step3': ['招一只打工猫，然后就能跟首领说「帮我派一张卡：……」', 'Hire a worker cat, then tell the leader: “Make me a card: …”'],
-    'welcome.title': ['欢迎来到猫猫盒子：三步开工', 'Welcome to agentboxbox: three steps to start'],
+    'welcome.step1': ['装进你的编程助手', 'Install it into your coding assistant'],
+    'welcome.step2': ['加一个帮手，填一个 API Key', 'Add a helper with an API key'],
+    'welcome.step3': ['回到你的会话说「把 XX 派给帮手」', 'Back in your chat, say “hand XX to the helpers”'],
+    'welcome.title': ['欢迎来到猫猫盒子', 'Welcome to agentboxbox'],
 });

@@ -57,18 +57,23 @@ def import_from(d, raw_path: str, running=None) -> dict:
     if _card_count(d.store):
         return _no("import.has_cards")
     port = config.settings().get("core_port")
+    swapped = False
     try:
         with d.lock:                                  # 和看门狗同一把锁：换库的时候别同时收尾
             if _card_count(d.store):
                 return _no("import.has_cards")
-            _backup(d.store, data / "boxbox.db")
+            # 先拷库以外的文件，再换库：拷到一半失败时库里还是空的，用户能重试
             _copy_side(data, port)
+            _backup(d.store, data / "boxbox.db")
+            swapped = True
             _settle(d)
             cats = len(config.stations())
             cards = _card_count(d.store)
             text = i18n.t("import.done", d.lang(), cats=cats, cards=cards)
             d.store.event("import_old", text, data={"cats": cats, "cards": cards, "from": str(data)})
     except (OSError, sqlite3.Error):
+        if swapped:
+            d.store.clear_all()                      # 库已经换过了：清回空的，用户才能再导一次
         return _no("import.failed")
     return {"ok": True, "text": text, "cats": cats, "cards": cards}
 

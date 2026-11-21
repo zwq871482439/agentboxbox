@@ -199,11 +199,12 @@ def handle(msg: dict, station: str, role: str, call, lang: str | None = None, lo
         note_cancelled(station, rid)
         return None
     if method == "initialize":
+        instr_key = "mcp.instructions" if role == "leader" else "mcp.instructions.member"
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "protocolVersion": params.get("protocolVersion") or PROTOCOL_FALLBACK,
-            "capabilities": {"tools": {"listChanged": False}},
+            "capabilities": {"tools": {"listChanged": False}, "prompts": {"listChanged": False}},
             "serverInfo": {"name": "boxbox", "version": __import__("boxbox").__version__},
-            "instructions": i18n.t("mcp.instructions", lg, sid=station or i18n.t("mcp.no_station", lg), role=role)}}
+            "instructions": i18n.t(instr_key, lg, sid=station or i18n.t("mcp.no_station", lg), role=role)}}
     if mid is None or (method or "").startswith("notifications/"):
         return None
     if method == "ping":
@@ -234,6 +235,22 @@ def handle(msg: dict, station: str, role: str, call, lang: str | None = None, lo
             return {"jsonrpc": "2.0", "id": mid,
                     "result": {"content": [{"type": "text", "text": i18n.t("mcp.core_unreachable", lg, err=e)}],
                                "isError": True}}
+    if method == "prompts/list":
+        # Claude Code 把 MCP prompt 变成斜杠命令（/mcp__boxbox__dispatch），Cursor 走 command 链接。
+        # 派活口令只给首领：打工猫的连接列出来也用不上 assign。
+        prompts = ([{"name": "dispatch", "description": i18n.t("mcp.prompt.dispatch", lg),
+                     "arguments": [{"name": "task", "description": i18n.t("mcp.prompt.dispatch.task", lg),
+                                     "required": True}]}] if role == "leader" else [])
+        return {"jsonrpc": "2.0", "id": mid, "result": {"prompts": prompts}}
+    if method == "prompts/get":
+        name = params.get("name")
+        if role != "leader" or name != "dispatch":
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "unknown prompt %s" % name}}
+        task = str((params.get("arguments") or {}).get("task") or "")
+        return {"jsonrpc": "2.0", "id": mid, "result": {
+            "description": i18n.t("mcp.prompt.dispatch", lg),
+            "messages": [{"role": "user", "content": {"type": "text",
+                                                          "text": i18n.t("mcp.prompt.dispatch.text", lg, task=task)}}]}}
     return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "method not found: %s" % method}}
 
 

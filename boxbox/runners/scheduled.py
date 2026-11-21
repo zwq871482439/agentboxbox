@@ -8,21 +8,11 @@ no report back within `work_timeout_min` means the session is gone -> finish() e
 """
 from __future__ import annotations
 
-import datetime as _dt
 import pathlib
 
 from .. import i18n
+from ..dispatcher_util import _mins_since
 from .base import Heartbeat, RunHandle, Runner, RunResult
-
-
-def _mins_since(iso) -> float:
-    """Minutes elapsed since an ISO stamp; 0 when absent or unparseable (never negative-blows up the run)."""
-    if not iso:
-        return 0.0
-    try:
-        return (_dt.datetime.now().astimezone() - _dt.datetime.fromisoformat(str(iso))).total_seconds() / 60
-    except (TypeError, ValueError):
-        return 0.0
 
 
 class ScheduledRunner(Runner):
@@ -59,7 +49,7 @@ class ScheduledRunner(Runner):
         if not picked:
             return Heartbeat(alive=True, finished=False, last_activity=None)  # queued, waiting for the next trigger
         last = handle.extra.get("last_report_at") or picked
-        lost = _mins_since(last) > self.timeout_min() and not handle.extra.get("reported")
+        lost = _mins_since(last, 0.0) > self.timeout_min() and not handle.extra.get("reported")
         return Heartbeat(alive=not lost, finished=lost, last_activity=last, evidence="tool")
 
     def finish(self, handle: RunHandle) -> RunResult:

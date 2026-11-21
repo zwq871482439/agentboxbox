@@ -18,11 +18,7 @@
 
   /* ================= 小工具 ================= */
   NS.$ = function (s, r) { return (r || document).querySelector(s); };
-  NS.esc = function (s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  };
+  NS.esc = window.BXu.esc;
   NS.num = function (v, dflt) { var n = parseInt(v, 10); return isNaN(n) ? (dflt || 0) : n; };
   /* 文案表：中文照旧（老文案一个字没动），英文另写一份；每个文件登记自己那一份，键不重名。
      取词：NS.tx("lead.welcome.title")；要带数就 NS.tx("lead.connect.waited", {n: "12 秒"}) */
@@ -45,37 +41,20 @@
   NS.lang = function () { return window.BXi18n ? window.BXi18n.lang() : "zh"; };
   /* 问后端要文案时带上语言，后端照这个语言回 */
   NS.langParam = function () { return "?lang=" + NS.lang(); };
+  NS.langParam2 = function () { return "&lang=" + NS.lang(); };   /* 拼在已有查询串后面 */
   /* 换语言：记住选择、告诉办公室画布、当前窗口重画（每一步自己登记怎么重画） */
   NS.setLang = function (l) { if (window.BXi18n) { window.BXi18n.setLang(l); } };
   NS.rerender = null;      /* 当前窗口怎么重画 */
   addEventListener("bx-lang-changed", function () { if (NS.rerender) { NS.rerender(); } });
   NS.api = function (path, opts) {
-    return fetch(path, Object.assign({ cache: "no-store" }, opts || {})).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
-    }).catch(function (e) { return { ok: false, data: { text: String(e) } }; });
+    return window.BXu.api(path, Object.assign({ cache: "no-store" }, opts || {}))
+      .then(function (r) { return r.error ? { ok: false, data: { text: r.error } } : r; });
   };
   NS.post = function (path, body) {
     return NS.api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
   };
   NS.copyText = function (text, btn) {
-    function flash(ok) {
-      if (!btn) { return; }
-      var o = btn.textContent;
-      btn.textContent = ok ? NS.tx("common.copied") : NS.tx("common.copyFail");
-      setTimeout(function () { btn.textContent = o; }, 1500);
-    }
-    function execCopy() {
-      var ta = document.createElement("textarea");
-      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
-      document.body.appendChild(ta); ta.select();
-      var ok = false;
-      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
-      document.body.removeChild(ta);
-      return ok;
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { flash(true); }, function () { flash(execCopy()); });
-    } else { flash(execCopy()); }
+    window.BXu.copy(text, btn, NS.tx("common.copied"), NS.tx("common.copyFail"));
   };
   /* 用办公室同一套画猫代码画一只猫（cats.js 的 renderCatSprite，前后两层叠一张） */
   NS.drawCat = function (cv, spec) {
@@ -335,7 +314,7 @@ window.BXOB.addTxt("common", {
     'copyFail': ['复制失败，请手动选中', 'Copy failed, please select the text yourself'],
     'langEn': ['English', 'English'],
     'langZh': ['中文', 'Chinese'],
-    'later': ['稍后再招', 'Maybe later'],
+    'later': ['稍后再加', 'Maybe later'],
     'next': ['下一步', 'Next'],
     'nextCat': ['下一只', 'Next cat'],
     'pickCount': ['8 只里选 · {n}/{total}', 'Pick from 8 · {n}/{total}'],

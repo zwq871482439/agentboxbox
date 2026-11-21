@@ -16,7 +16,12 @@ _RE_BUSY = re.compile(r"\b429\b|\b529\b|rate.?limit|too many requests|concurren|
 _RE_QUOTA = re.compile(r"\b403\b|quota|usage limit|insufficient|balance|exceeded your|billing|欠费|余额", re.I)
 # 写明是额度/套餐用完的话，哪怕状态码是 429 也是「没额度」不是「忙」：Kimi 周额度用完回的就是
 # 429 rate_limit_error + "reached your weekly (7-day) usage limit"，按「忙」说用户会一直等（10 个新用户模拟时撞上）
-_RE_QUOTA_WORDS = re.compile(r"quota|usage limit|insufficient (balance|quota|credit)|balance|billing|欠费|余额|额度|用量已", re.I)
+# 智谱 GLM 周 / 月额度用完回的是 429 + code 1310「您已达到每周/每月使用上限，您的限额将在 … 重置」，
+# 5 小时额度用完是 1308「已达到 5 小时的使用上限」，调用次数用完 1304「已达上限」，套餐过期 1309「套餐已到期」。
+# 不收「限额」两个字：并发太高（1302）/ 频率太高（1303）也写「联系客服增加限额」，那两个才是真的忙
+_RE_QUOTA_WORDS = re.compile(r"quota|usage limit|(?:daily|weekly|monthly) (?:usage )?limit|"
+                             r"insufficient (balance|quota|credit)|balance|billing|欠费|余额|额度|用量已|"
+                             r"使用上限|已达上限|套餐已到期", re.I)
 # Connection error 是 Node fetch 报网络断的另一种写法；502/503/504 是网关/服务端出错（自重试失败时 Pi 以退出码 0 结束，
 # 核心要按「模型接口连不上」处理而不是当成交回），跟 ENOTFOUND 那批同属 unreachable 一档
 _RE_UNREACH = re.compile(r"ENOTFOUND|EAI_AGAIN|getaddrinfo|ECONNREFUSED|ECONNRESET|ETIMEDOUT|timed? ?out|fetch failed|"
@@ -25,7 +30,10 @@ _RE_UNREACH = re.compile(r"ENOTFOUND|EAI_AGAIN|getaddrinfo|ECONNREFUSED|ECONNRES
 _RE_RESET_ISO = re.compile(r"reset[^0-9]{0,40}(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?)", re.I)
 _RE_RESET_AFTER = re.compile(r"(?:retry|reset|try again)\w*\s+(?:after|in)\s+(\d+)\s*(s|sec|seconds|m|min|minutes|h|hours)", re.I)
 # 中文钟点：「将在 01:54 重置」「01:54 后恢复」→ 记下回来的钟点
-_RE_RESET_CLOCK = re.compile(r"(\d{1,2})\s*[:：]\s*(\d{2})\s*(?:后|之后)?\s*(?:重置|恢复|再来|重试|解除)", re.I)
+# 前面不能紧挨着日期或别的时间（「年-月-日 时:分:秒 重置」里的「时:分」「分:秒」都不算钟点，整个日期时间另认）
+_RE_RESET_CLOCK = re.compile(r"(?<!\d-\d{2}[ T])(?<![\d:])(\d{1,2})\s*[:：]\s*(\d{2})\s*(?:后|之后)?\s*(?:重置|恢复|再来|重试|解除)", re.I)
+# 中文整句日期时间：「您的限额将在 年-月-日 时:分:秒 重置」→ 那一刻（不带时区，按本机时区理解）
+_RE_RESET_CN_AT = re.compile(r"(\d{4}-\d{2}-\d{2}[T ]\d{1,2}:\d{2}(?::\d{2})?)\s*(?:后|之后)?\s*(?:重置|恢复|解除)")
 # 英文钟点："resets at 01:54" / "available again at 01:54"
 _RE_RESET_CLOCK_EN = re.compile(r"(?:resets?|available|back|retry)\w*\s+(?:again\s+)?(?:at|in)\s+(\d{1,2})\s*[:：]\s*(\d{2})", re.I)
 # HTTP 头：Retry-After: 120（秒）/ x-ratelimit-reset: 1730000000（秒数或时间戳）
@@ -126,6 +134,13 @@ def reset_time(text: str, now: datetime | None = None) -> str | None:
             if dt.tzinfo is None:
                 dt = dt.astimezone()  # 无偏移按本地时间理解
             return dt.astimezone().isoformat(timespec="seconds")
+        except ValueError:
+            pass
+    m = _RE_RESET_CN_AT.search(text)
+    if m:
+        try:
+            dt = datetime.fromisoformat(m.group(1).replace(" ", "T", 1))
+            return dt.astimezone().isoformat(timespec="seconds")   # 没带时区：按本机时区理解
         except ValueError:
             pass
     m = _RE_RESET_AFTER.search(text)

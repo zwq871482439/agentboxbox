@@ -76,4 +76,5 @@ def _clear_files() -> None:
                     p.write_text("", encoding="utf-8")   # 正在被写的日志：截断，不删
                 except OSError:
                     pass
+    tmpdir.clean_orphans([])   # 重置后卡号重新从 001 排：旧的卡临时目录得清掉，不然新 001 会拿到旧 001 的脚本（leader 不动）
     config.ensure_dirs()

@@ -1,4 +1,4 @@
-<!-- 设置页 (/settings)：核心参数、服务商清单、数据与隐私。工位增删改在「工位」页。 -->
+<!-- 设置页 (/settings)：常用设置、高级设置、数据与隐私。帮手增删改在「帮手」页。 -->
 <!doctype html>
 <html lang="zh-CN">
 <head>
@@ -9,116 +9,73 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/pixelwin.css">
+<link rel="stylesheet" href="/static/pixelpage.css">
 <style>
 :root{
-  --bg:#14161a; --panel:#1b1e24; --line:#2b3037; --ink:#e5e8ea; --dim:#98a1ac;
-  --accent:#7aa8d8; --red:#d9776a; --amber:#cfa14a; --green:#6db391; --code:#22262d;
+  --bg:#f6efe3; --panel:#fbf3e1; --line:#2b1d12; --ink:#2b1d12; --dim:#6d5a45;
+  --accent:#3f9b4f; --red:#b3402f; --amber:#9a6a12; --green:#3f9b4f; --code:#f0e5d0;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.55 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
-a{color:var(--accent)}
+a{color:#2f6f3f}
 h1,h2{margin:0;font-weight:600}
 code,pre,.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
-.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
-.top .brand{font-weight:600;letter-spacing:.5px}
-.top nav a{margin-right:14px;color:var(--dim);text-decoration:none}
-.top nav a.cur{color:var(--ink);font-weight:600}
 .wrap{max-width:960px;margin:22px auto;padding:0 18px 40px}
 .pagehead{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
 .pagehead h1{font-size:18px}
 .pagehead .sub{margin:2px 0 0;color:var(--dim);font-size:12.5px}
 .pagehead .headbtns{margin-left:auto;display:flex;align-items:center;gap:10px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:16px}
-.hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
-.hd h1{font-size:16px}
-.hd .sp{flex:1}
 .hint{color:var(--dim);font-size:12.5px;margin:6px 0 0}
-.foot{color:var(--dim);font-size:12px;margin-top:8px}
-.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer;font:inherit}
-.btn:hover{border-color:var(--accent)}
+.foot{color:var(--dim);font-size:12px;margin:8px 0 0}
+.btn{font:inherit;cursor:pointer}
 .btn:disabled{opacity:.5;cursor:default}
-.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.pri:hover{filter:brightness(1.08)}
 .btn.sm{padding:2px 8px;font-size:12.5px}
-.btn.danger:hover{border-color:var(--red);color:var(--red)}
-.btn.on{border-color:var(--accent);color:var(--accent)}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
-th{color:var(--dim);font-weight:600;white-space:nowrap}
-td.name{font-family:ui-monospace,Consolas,monospace}
-.empty{color:var(--dim);padding:10px 0}
-.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:var(--code);color:var(--dim)}
-.word{font-weight:600;white-space:nowrap}
-.word.busy{color:var(--amber)}
-.word.off{color:var(--dim)}
-.word.ok{color:var(--green)}
-/* 表单 */
-details.form>summary{cursor:pointer;font-weight:600;list-style:revert}
-details.form[open]>summary{margin-bottom:10px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
-@media (max-width:640px){.grid{grid-template-columns:1fr}}
-.f label{display:block;color:var(--dim);font-size:12.5px}
-.f input,.f select{display:block;width:100%;margin-top:3px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;
-  background:var(--panel);color:var(--ink);font:inherit}
-.f input:focus,.f select:focus{outline:2px solid var(--accent);outline-offset:-1px}
-.f input[readonly]{background:var(--code);color:var(--dim)}
-.f .chk{display:flex;align-items:center;gap:6px;margin-top:22px;color:var(--ink);font-size:13.5px}
-.f input[type=checkbox]{width:auto;margin:0}
-.sub{border-top:1px dashed var(--line);margin-top:14px;padding-top:12px}
-.sub h3{margin:0 0 8px;font-size:13.5px;font-weight:600}
-.errs{margin-top:10px}
-.errs div{color:var(--red);font-size:13px;padding:4px 0}
-.msg{margin-top:8px;font-size:13px;padding:7px 10px;border-radius:6px;background:var(--code)}
+/* 面板里的行：标签在左、控件在右，说明在下面一行 */
+.row{padding:11px 0;border-bottom:1px dashed rgba(43,29,18,.22)}
+.row:last-of-type{border-bottom:0}
+.rowtop{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.rowtop .lb{flex:0 1 200px;font-weight:600;font-size:13.5px}
+.rowtop .ctl{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.row .ds{margin:4px 0 0;color:var(--dim);font-size:12.5px}
+.row .u{margin:0;color:var(--dim);font-size:12.5px}
+.row input[type=number]{width:88px}
+.row input[type=time]{width:92px}
+.times{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.times label{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--dim)}
+.times input{margin:0}
+.sep{color:var(--dim)}
+.saved{color:var(--green);font-weight:600}
+.msg{margin-top:8px;font-size:13px;padding:7px 10px;background:var(--code);border:2px solid var(--line)}
 .msg.ok{color:var(--green)}
 .msg.fail{color:var(--red)}
 .msg.info{color:var(--dim)}
-.prm{display:grid;grid-template-columns:150px 1fr 90px 36px;gap:6px 14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
-.prm:first-of-type{border-top:0}
-.prm .lb{font-weight:600}
-.prm .ds{color:var(--dim);font-size:12.5px}
-.prm input{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;text-align:right}
-.saved{color:var(--green);font-weight:600}
-.prm .u{font-size:12px;color:var(--dim);margin-left:6px}
-.prm input[type=checkbox]{width:auto;justify-self:end;margin:0;accent-color:var(--green)}
-.prm .times{grid-column:2 / span 3;display:flex;flex-wrap:wrap;gap:6px 18px}
-/* 一行里的按钮组（语言、服务商清单、临时文件、数据目录、从旧版导入）：放到说明下面一整行，别挤进最右那 36px 的格子里一字一行 */
-.prm .ctl{grid-column:2 / -1;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
-.prm .ctl .btn{white-space:nowrap}
-#import-path{flex:1 1 220px;width:auto;max-width:420px;text-align:left}
-.prm .times label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim)}
-.prm .times input{width:auto;margin:0}
-details.adv>summary{cursor:pointer;font-weight:600;font-size:16px}
-details.adv .hint{margin:4px 0 8px}
-#doctor .chk{display:grid;grid-template-columns:52px 220px 1fr;gap:4px 12px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px}
-#doctor .mk{font-size:12px;font-weight:600}#doctor .mk.ok{color:#3ddc84}#doctor .mk.fail{color:#ff6b6b}#doctor .mk.skip{color:var(--dim)}
-#doctor .dt{color:var(--dim);word-break:break-all}#doctor .fx{grid-column:2 / span 2;color:#f5b301;font-size:12.5px}
-/* 联网修复前的页面内确认框（像素风：方角、硬阴影，不用浏览器 alert） */
-.dlg{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
+/* 高级：一块收起的设置，默认不展开 */
+details.adv>summary{cursor:pointer;font-weight:600;font-size:15px}
+details.adv>summary::marker{color:#6b4a2f}
+/* 页面内确认框（像素风：方角、硬阴影，不用浏览器 alert） */
+.dlg{position:fixed;inset:0;z-index:80;background:rgba(43,29,18,.55);display:flex;align-items:center;justify-content:center}
 .dlg[hidden]{display:none}
-.dlg .box{background:var(--panel);border:2px solid var(--line);border-radius:0;padding:16px 18px;max-width:430px;box-shadow:4px 4px 0 rgba(0,0,0,.6)}
+.dlg .box{background:var(--panel);border:3px solid var(--line);padding:16px 18px;max-width:430px;box-shadow:6px 6px 0 rgba(0,0,0,.35)}
 .dlg .box h3{margin:0 0 8px;font-size:14px}
 .dlg .box p{margin:0;color:var(--dim);font-size:13px;white-space:pre-wrap;word-break:break-all}
 .dlg .btns{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 [hidden]{display:none!important}
-/* 重置所有：方角、硬阴影，跟办公室像素框一个脾气，但不用大红块 */
-#resetBox{border-radius:0;border:2px solid #3a3f47;box-shadow:5px 5px 0 #0c0d10;background:#191c21}
-#resetBox h1{color:var(--amber)}
-#resetBox .say{color:var(--ink);font-size:13.5px;margin:6px 0 10px}
+/* 重置所有：像素进度条 */
 .pxbar{display:flex;gap:3px;margin:10px 0 4px}
-.pxbar i{flex:1;height:16px;background:var(--code);border:2px solid #3a3f47;box-shadow:2px 2px 0 #0c0d10}
+.pxbar i{flex:1;height:16px;background:var(--code);border:2px solid #3a3f47;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
 .pxbar i.on{background:var(--green);border-color:var(--green)}
 .pxbar i.bad{background:var(--red);border-color:var(--red)}
 .pxname{color:var(--dim);font-size:12px}
-/* 数据和隐私：PRIVACY.md 原文，只认标题 / 列表 / 段落 / `代码` / **粗体** 这几种写法，[文字](文件) 只显示文字 */
-.privacy{font-size:13px;line-height:1.7;max-height:420px;overflow:auto;padding-right:6px}
+/* 隐私声明全文：只认标题 / 列表 / 段落 / `代码` / **粗体** 这几种写法，[文字](文件) 只显示文字 */
+.privacy{font-size:13px;line-height:1.7}
 .privacy h2{font-size:14px;margin:14px 0 4px}
 .privacy h3{font-size:13.5px;margin:10px 0 4px}
 .privacy p{margin:4px 0}
 .privacy ul,.privacy ol{margin:4px 0;padding-left:22px}
-.privacy code{background:var(--code);padding:0 4px;border-radius:3px;font-size:12px}
-.privacy hr{border:0;border-top:1px solid var(--line);margin:14px 0}
-/* 许可证 / 第三方声明的像素窗口：标题在左 × 在右，正文是整份全文（自带滚动条，不套 pxw 那种小 pre） */
+.privacy code{background:var(--code);padding:0 4px;font-size:12px}
+.privacy hr{border:0;border-top:1px solid rgba(43,29,18,.3);margin:14px 0}
+/* 许可证 / 第三方声明的像素窗口：标题在左 × 在右，正文是整份全文（自带滚动条） */
 .bx-legalwin{position:fixed;inset:0;z-index:60;display:none}
 .bx-legalwin.on{display:block}
 .bx-legalbox:focus{outline:none}
@@ -131,16 +88,17 @@ details.adv .hint{margin:4px 0 8px}
 </style>
 <script src="/static/i18n.js"></script>
 <script src="/static/i18n-settings.js"></script>
+<script src="/static/util.js"></script>
 <script src="/static/topbar.js" defer></script>
 </head>
-<body>
+<body class="px-page">
 <header id="bx-top"></header>
 <div class="wrap">
 
   <div class="pagehead">
     <div>
       <h1 data-i18n="st.h1">设置</h1>
-      <p class="sub" data-i18n="st.sub">常用参数、数据和隐私</p>
+      <p class="sub" data-i18n="st.sub">常用设置、数据和隐私</p>
     </div>
     <div class="headbtns">
       <span class="hint" id="set-msg" style="margin:0"></span>
@@ -149,74 +107,127 @@ details.adv .hint{margin:4px 0 8px}
   </div>
 
   <div class="panel">
-    <div class="hd"><h1 data-i18n="st.params">盒子参数</h1><span class="sp"></span></div>
-    <div class="prm"><span class="lb" data-i18n="st.lang">语言</span>
-      <span class="ds" data-i18n="st.langDesc">界面、上岗话和办公室用哪种语言。选了就一直按这个来。</span>
-      <span class="ctl">
-        <button type="button" class="btn" id="lang-zh" data-i18n="st.langZh">中文</button>
-        <button type="button" class="btn" id="lang-en" data-i18n="st.langEn">English</button></span></div>
-    <div class="prm"><span class="lb" data-i18n="st.wakeMin">多久提醒你去叫首领</span>
-      <span class="ds" data-i18n="st.wakeMinDesc">首领手上有待办、却这么多分钟没来看，别的猫会围过去冒问号，办公室顶上也会提示你去叫它。</span>
-      <input id="s-wake_min" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
-    <div class="prm"><span class="lb" data-i18n="st.ackTimeout">启动等待</span>
-      <span class="ds" data-i18n="st.ackTimeoutDesc">盒子自动启动一个工位后，最多等几秒启动器回一句「已启动」；超时了就当这张卡没送出去，不会自动重试，换不换工位由你定。</span>
-      <input id="s-ack_timeout_s" type="number" min="1"><span class="u" data-i18n="st.seconds">秒</span></div>
-    <div class="prm"><span class="lb" data-i18n="st.heartbeat">检查间隔</span>
-      <span class="ds" data-i18n="st.heartbeatDesc">盒子多久查一遍任务执行情况：工位进程还在不在、交没交付、要不要提醒你。不查 API key 余额。</span>
-      <input id="s-heartbeat_s" type="number" min="1"><span class="u" data-i18n="st.seconds">秒</span></div>
-    <div class="prm"><span class="lb" data-i18n="st.sceneBubbles">完成后首领冒气泡叫你看庆祝 / 复盘</span>
-      <span class="ds" data-i18n="st.sceneBubblesDesc">卡验收通过、同一目标的一批全部完成、或出了事故时，首领在办公室冒气泡邀请你看庆祝 / 开复盘，点了才演。不勾就只有办公室自己演，首领不邀请。</span>
-      <input id="s-scene_bubbles" type="checkbox" checked></div>
-    <div class="prm"><span class="lb" data-i18n="st.memberFeedback">首领的验收反馈写进打工猫的说明</span>
-      <span class="ds" data-i18n="st.memberFeedbackDesc">首领验收时多给的一句约束（哪里偏了、下次怎么做），之后派给这只猫的每张卡都会带上。默认关。</span>
-      <input id="s-member_feedback" type="checkbox"></div>
-    <div class="prm"><span class="lb" data-i18n="st.feedbackMax">反馈最多多少字</span>
-      <span class="ds" data-i18n="st.feedbackMaxDesc">每只猫那段反馈的上限（不少于 120）。超了先挤掉最旧的，免得说明越写越长、每张卡都要多付模型的钱。</span>
-      <input id="s-member_feedback_max_chars" type="number" min="120"><span class="u" data-i18n="st.chars">字</span></div>
-    <div class="prm"><span class="lb" data-i18n="st.trayNotify">卡交回、出问题时在桌面弹通知</span>
-      <span class="ds" data-i18n="st.trayNotifyDesc">猫把卡交回了、没跑成、没开工或等首领拿主意时，盒子在桌面右下角弹一条系统通知，提醒你去会话里跟首领说一声。</span>
-      <input id="s-tray_notify" type="checkbox" checked></div>
-    <div class="prm"><span class="lb" data-i18n="st.theme">办公室昼夜</span>
-      <span class="ds" data-i18n="st.themeDesc">「自动」档按电脑时间换房间配色，清晨和傍晚是两段渐变。办公室里霓虹招牌下面的开关可以固定成某一段。</span>
-      <span class="times"><label><span data-i18n="st.dawn">清晨</span><input id="t-dawn" type="time" value="06:30"></label>
-        <label><span data-i18n="st.day">白天</span><input id="t-day" type="time" value="07:00"></label>
-        <label><span data-i18n="st.dusk">傍晚</span><input id="t-dusk" type="time" value="18:00"></label>
-        <label><span data-i18n="st.night">夜晚</span><input id="t-night" type="time" value="18:30"></label></span></div>
-    <div class="prm"><span class="lb" data-i18n="st.providers">服务商清单</span>
-      <span class="ds" data-i18n="st.providersDesc">登记 Pi 工位时从这里选服务商和模型，再按公开单价估算花费。清单来自 models.dev（MIT）。「更新」要从网上下载最新的一份。</span>
-      <span class="ctl">
-        <button class="btn" id="btn-prov" data-i18n="st.update">更新</button><span class="ds" id="prov-status" data-i18n="st.reading">正在读…</span></span></div>
-    <div class="foot"><span data-i18n="st.foot">这里只放常用参数；端口、留存天数在 data/settings.json 里改。工位在「工位」页里加和改。</span>
-      <span data-i18n="st.version">当前版本</span> <b id="bx-app-version">–</b></div>
-    <details class="adv">
-      <summary data-i18n="st.advanced">高级</summary>
-      <p class="hint" data-i18n="st.advancedDesc">卡住提醒和单条命令的时长。默认就够用。</p>
-      <div class="prm"><span class="lb" data-i18n="st.stallCmd">命令多久没新输出就提醒</span>
-        <span class="ds" data-i18n="st.stallCmdDesc">命令还在跑、但这么多分钟没有新输出，待办里标「可能卡住」。不看命令写的是什么。</span>
-        <input id="s-stall_cmd_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
-      <div class="prm"><span class="lb" data-i18n="st.stallModel">模型多久没回话就提醒</span>
-        <span class="ds" data-i18n="st.stallModelDesc">这么多分钟没有任何新的模型输出，待办里标「可能卡住」。</span>
-        <input id="s-stall_model_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
-      <div class="prm"><span class="lb" data-i18n="st.stallNotool">多久不调用工具就提醒</span>
-        <span class="ds" data-i18n="st.stallNotoolDesc">模型还在输出，但这么多分钟没有调用工具，待办里标「可能卡住」。只提醒，不停下。</span>
-        <input id="s-stall_notool_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
-      <div class="prm"><span class="lb" data-i18n="st.cmdHard">一条命令最长跑多久</span>
-        <span class="ds" data-i18n="st.cmdHardDesc">到了就停下这次，卡记失败，写上是哪条命令超时。对话还留着，可以再派接着做。</span>
-        <input id="s-cmd_hard_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></div>
-      <div class="prm"><span class="lb" data-i18n="st.logFull">完整运行记录</span>
-        <span class="ds" data-i18n="st.logFullDesc">原样记下模型逐字的输出和长命令每次的全部输出。只在排查问题时打开，很占地方。</span>
-        <input id="s-log_full" type="checkbox"></div>
-      <div class="prm"><span class="lb" data-i18n="st.logTail">长命令的输出记多少</span>
-        <span class="ds" data-i18n="st.logTailDesc">命令还在跑时，每 30 秒记一次，只留最后这么多字。0 = 只记命令跑完的结果。</span>
-        <input id="s-log_tool_tail_chars" type="number" min="0"><span class="u" data-i18n="st.chars">字</span></div>
-      <div class="prm"><span class="lb" data-i18n="st.logGzip">结束的卡几天后压缩记录</span>
-        <span class="ds" data-i18n="st.logGzipDesc">完成、撤掉、失败的卡，运行记录过这么多天压成 .gz，大约只剩二十分之一。0 = 下一次整理就压（每小时一次）。</span>
-        <input id="s-log_gzip_days" type="number" min="0"><span class="u" data-i18n="st.days">天</span></div>
-      <div class="prm"><span class="lb" data-i18n="st.logKeep">结束的卡记录留多久</span>
-        <span class="ds" data-i18n="st.logKeepDesc">过了就删掉运行记录，卡片和回报留着。0 = 一直留。</span>
-        <input id="s-log_keep_days" type="number" min="0"><span class="u" data-i18n="st.days">天</span></div>
-    </details>
+    <div class="hd"><h1 data-i18n="st.common">常用</h1></div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.lang">语言</span>
+        <span class="ctl">
+          <button type="button" class="btn" id="lang-zh" data-i18n="st.langZh">中文</button>
+          <button type="button" class="btn" id="lang-en" data-i18n="st.langEn">English</button></span></div>
+      <p class="ds" data-i18n="st.langDesc">界面和办公室用哪种语言。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.trayNotify">桌面通知</span>
+        <span class="ctl"><input id="s-tray_notify" type="checkbox" checked></span></div>
+      <p class="ds" data-i18n="st.trayNotifyDesc">任务做完或出问题时，桌面右下角弹一条通知。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.theme">办公室昼夜</span>
+        <span class="ctl"><span class="times"><label><span data-i18n="st.dawn">清晨</span><input id="t-dawn" type="time" value="06:30"></label>
+          <label><span data-i18n="st.day">白天</span><input id="t-day" type="time" value="07:00"></label>
+          <label><span data-i18n="st.dusk">傍晚</span><input id="t-dusk" type="time" value="18:00"></label>
+          <label><span data-i18n="st.night">夜晚</span><input id="t-night" type="time" value="18:30"></label></span></span></div>
+      <p class="ds" data-i18n="st.themeDesc">办公室按电脑时间换配色。</p>
+    </div>
   </div>
+
+  <details class="panel adv">
+    <summary data-i18n="st.advanced">高级</summary>
+    <p class="hint" data-i18n="st.advancedDesc">平时用不上的都在这里，默认就够用。</p>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.wakeMin">多久提醒你</span>
+        <span class="ctl"><input id="s-wake_min" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></span></div>
+      <p class="ds" data-i18n="st.wakeMinDesc">编程助手手上有待办、却这么久没来，办公室会提醒你去找它。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.ackTimeout">启动等待</span>
+        <span class="ctl"><input id="s-ack_timeout_s" type="number" min="1"><span class="u" data-i18n="st.seconds">秒</span></span></div>
+      <p class="ds" data-i18n="st.ackTimeoutDesc">启动一个帮手后，最多等它回一句「已开始」。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.heartbeat">检查间隔</span>
+        <span class="ctl"><input id="s-heartbeat_s" type="number" min="1"><span class="u" data-i18n="st.seconds">秒</span></span></div>
+      <p class="ds" data-i18n="st.heartbeatDesc">盒子多久查一遍任务的情况。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.sceneBubbles">庆祝气泡</span>
+        <span class="ctl"><input id="s-scene_bubbles" type="checkbox" checked></span></div>
+      <p class="ds" data-i18n="st.sceneBubblesDesc">任务做完或出了事故，编程助手在办公室里冒气泡请你看。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.memberFeedback">验收反馈</span>
+        <span class="ctl"><input id="s-member_feedback" type="checkbox"></span></div>
+      <p class="ds" data-i18n="st.memberFeedbackDesc">编程助手验收时多给的那句约束，会带进它以后派的任务。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.feedbackMax">反馈字数上限</span>
+        <span class="ctl"><input id="s-member_feedback_max_chars" type="number" min="120"><span class="u" data-i18n="st.chars">字</span></span></div>
+      <p class="ds" data-i18n="st.feedbackMaxDesc">那段反馈最多多少字，超了就挤掉最旧的。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.stallCmd">命令无输出</span>
+        <span class="ctl"><input id="s-stall_cmd_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></span></div>
+      <p class="ds" data-i18n="st.stallCmdDesc">命令还在跑、却这么久没有新输出，任务列表会标「可能卡住」。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.stallModel">模型无输出</span>
+        <span class="ctl"><input id="s-stall_model_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></span></div>
+      <p class="ds" data-i18n="st.stallModelDesc">模型这么久没有新输出，任务列表会标「可能卡住」。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.stallNotool">久不用工具</span>
+        <span class="ctl"><input id="s-stall_notool_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></span></div>
+      <p class="ds" data-i18n="st.stallNotoolDesc">模型还在说话、却这么久没调用工具，任务列表会标「可能卡住」。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.cmdHard">单条命令上限</span>
+        <span class="ctl"><input id="s-cmd_hard_s" type="number" min="1"><span class="u" data-i18n="st.minutes">分钟</span></span></div>
+      <p class="ds" data-i18n="st.cmdHardDesc">一条命令跑到这么久还没结束，就停下这次运行。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.logFull">完整运行记录</span>
+        <span class="ctl"><input id="s-log_full" type="checkbox"></span></div>
+      <p class="ds" data-i18n="st.logFullDesc">原样记下模型输出的每个字，很占地方。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.logTail">输出保留字数</span>
+        <span class="ctl"><input id="s-log_tool_tail_chars" type="number" min="0"><span class="u" data-i18n="st.chars">字</span></span></div>
+      <p class="ds" data-i18n="st.logTailDesc">命令还在跑时每 30 秒记一次，只留最后这么多字。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.logGzip">压缩天数</span>
+        <span class="ctl"><input id="s-log_gzip_days" type="number" min="0"><span class="u" data-i18n="st.days">天</span></span></div>
+      <p class="ds" data-i18n="st.logGzipDesc">结束的隔这么多天，运行记录压成 .gz。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.logKeep">记录保留天数</span>
+        <span class="ctl"><input id="s-log_keep_days" type="number" min="0"><span class="u" data-i18n="st.days">天</span></span></div>
+      <p class="ds" data-i18n="st.logKeepDesc">过了就删掉运行记录，任务和回报留着。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.providers">模型平台</span>
+        <span class="ctl"><button class="btn" id="btn-prov" data-i18n="st.update">更新</button>
+          <span class="u" id="prov-status" data-i18n="st.reading">正在读…</span></span></div>
+      <p class="ds" data-i18n="st.providersDesc">加帮手时在这里选模型平台和模型。</p>
+    </div>
+  </details>
 
   <div class="panel" id="doctor">
     <div class="hd"><h1 data-i18n="st.selfcheck">自检</h1><span class="sp"></span>
@@ -226,44 +237,58 @@ details.adv .hint{margin:4px 0 8px}
   </div>
 
   <div class="panel" id="legal">
-    <div class="hd"><h1 data-i18n="st.data">数据和隐私</h1><span class="sp"></span>
-      <button type="button" class="btn" id="legal-license" data-i18n="st.license">许可证（MIT）</button>
-      <button type="button" class="btn" id="legal-notices" data-i18n="st.notices">第三方声明</button>
-      <button type="button" class="btn" id="legal-third-party" data-i18n="st.thirdParty">第三方许可全文</button>
+    <div class="hd"><h1 data-i18n="st.data">数据和隐私</h1></div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.privacy">隐私</span>
+        <span class="ctl"><button type="button" class="btn" id="legal-privacy" data-i18n="st.seeFull">看全文</button></span></div>
+      <p class="ds" id="privacyBox" data-i18n="st.privacyLine">只在你配置或点了的时候联网，密钥只存在这台电脑上。</p>
     </div>
-    <div id="privacyBox" class="privacy"><div class="empty" data-i18n="st.readingPrivacy">正在读隐私声明…</div></div>
-    <div class="prm"><span class="lb" data-i18n="st.tmp">临时文件</span>
-      <span class="ds" data-i18n="st.tmpDesc">过程垃圾（存请求正文的 JSON、试跑脚本、中间文件）都在程序目录的 tmp\ 里，每张卡一个子目录。
-        完成或撤掉的卡马上清；失败或中断的留着方便查，默认留 1 天（设置项 tmp_keep_days）。data\ 不动。</span>
-      <span class="ctl"><span id="tmp-size">–</span><button class="btn" id="btn-tmpclean" data-i18n="st.cleanTmp">清理临时文件</button>
-      <span class="hint" id="tmp-msg"></span></span></div>
-    <div class="prm"><span class="lb" data-i18n="st.dataUse">数据目录</span>
-      <span class="ds" data-i18n="st.dataUseDesc">data\ 里是盒子的记录：卡、工位、设置，和每次运行的记录（占地方的主要是它）。结束的卡的运行记录按「高级」里的天数自动压缩、删除。</span>
-      <span class="ctl"><span id="data-size">–</span><button class="btn" id="btn-dataclean" data-i18n="st.cleanData">现在压缩结束的卡的记录</button>
-      <span class="hint" id="data-msg"></span></span></div>
-    <div class="prm"><span class="lb" data-i18n="st.importOld">从旧版导入</span>
-      <span class="ds" data-i18n="st.importOldDesc">先从托盘退出旧版。会换成旧版的猫、设置和卡。</span>
-      <span class="ctl"><input id="import-path" type="text" data-i18n-placeholder="st.importOldPh" placeholder="旧版文件夹，或它的 data 文件夹">
-      <button type="button" class="btn" id="btn-import-old" data-i18n="st.importOldBtn">导入</button>
-      <span class="hint" id="import-msg"></span></span></div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.space">占用空间</span>
+        <span class="ctl"><span data-i18n="st.tmp">临时文件</span> <span id="tmp-size">–</span>
+          <span class="sep">·</span>
+          <span data-i18n="st.dataUse">数据目录</span> <span id="data-size">–</span>
+          <button class="btn" id="btn-clean" data-i18n="st.clean">清理</button>
+          <span class="u" id="space-msg"></span></span></div>
+      <p class="ds" data-i18n="st.spaceDesc">临时文件和运行记录占的地方。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.importOld">从旧版导入</span>
+        <span class="ctl"><input id="import-path" type="text" data-i18n-placeholder="st.importOldPh" placeholder="旧版文件夹，或它的 data 文件夹">
+        <button type="button" class="btn" id="btn-import-old" data-i18n="st.importOldBtn">导入</button>
+        <span class="u" id="import-msg"></span></span></div>
+      <p class="ds" data-i18n="st.importOldDesc">先从托盘退出旧版，会换成旧版的帮手、设置和任务。</p>
+    </div>
+
+    <div class="row">
+      <div class="rowtop"><span class="lb" data-i18n="st.legal">法律文件</span>
+        <span class="ctl"><button type="button" class="btn" id="legal-license" data-i18n="st.license">许可证</button>
+          <button type="button" class="btn" id="legal-notices" data-i18n="st.notices">第三方声明</button>
+          <button type="button" class="btn" id="legal-third-party" data-i18n="st.thirdParty">第三方许可全文</button></span></div>
+    </div>
   </div>
 
-
-  <div class="panel" id="resetBox">
-    <div class="hd"><h1 data-i18n="st.reset">重置所有</h1></div>
-    <p class="say" data-i18n="st.resetSay">把盒子恢复成刚装好的样子：全部工位、设置、API key、任务记录和日志都删掉，不可恢复。data/work 里的产出保留。</p>
-    <button class="btn danger" id="btn-reset" data-i18n="st.reset">重置所有</button>
-    <div id="reset-ask" hidden>
-      <p class="say" id="reset-ask-text"></p>
-      <div style="display:flex;gap:8px"><button class="btn danger" id="reset-yes" data-i18n="st.yes">确定</button>
-        <button class="btn" id="reset-no" data-i18n="st.no">算了</button></div>
+  <details class="panel" id="resetBox">
+    <summary data-i18n="st.reset">重置所有</summary>
+    <div class="row">
+      <p class="ds" data-i18n="st.resetSay">把盒子恢复成刚装好的样子：所有帮手、设置、密钥、任务记录和日志都删掉，不可恢复。data/work 里的产出保留。</p>
+      <div class="ctl" style="margin-left:0;justify-content:flex-start;margin-top:10px">
+        <button class="btn danger" id="btn-reset" data-i18n="st.resetBtn">开始重置</button></div>
+      <div id="reset-ask" hidden>
+        <p class="ds" id="reset-ask-text"></p>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn danger" id="reset-yes" data-i18n="st.yes">确定</button>
+          <button class="btn" id="reset-no" data-i18n="st.no">算了</button></div>
+      </div>
+      <div id="reset-run" hidden>
+        <div class="pxbar" id="reset-bar"></div>
+        <div class="pxname" id="reset-name"></div>
+        <div class="msg" id="reset-msg" hidden></div>
+      </div>
     </div>
-    <div id="reset-run" hidden>
-      <div class="pxbar" id="reset-bar"></div>
-      <div class="pxname" id="reset-name"></div>
-      <div class="msg" id="reset-msg" hidden></div>
-    </div>
-  </div>
+  </details>
 
   <div class="dlg" id="importDlg" hidden>
     <div class="box">
@@ -278,12 +303,13 @@ details.adv .hint{margin:4px 0 8px}
     <div class="box">
       <h3 data-i18n="st.provDlgTitle">要联网才能更新</h3>
       <p id="provDlgText"></p>
-      <div class="btns"><button class="btn" id="provDlgNo" data-i18n="st.cancel">取消</button>
-        <button class="btn pri" id="provDlgYes" data-i18n="st.download">确定下载</button></div>
+      <div class="btns"><button type="button" class="btn" id="provDlgNo" data-i18n="st.cancel">取消</button>
+        <button type="button" class="btn pri" id="provDlgYes" data-i18n="st.download">确定下载</button></div>
     </div>
   </div>
 
-  <div class="foot" data-i18n="st.dataFoot">数据都在 data/：settings.json 是这一页，stations.json 是工位，改文件也行。</div>
+  <div class="foot" data-i18n="st.dataFoot">数据都在 data/ 里，改文件也行。</div>
+  <div class="foot"><span data-i18n="st.version">当前版本</span> <b id="bx-app-version">–</b></div>
 </div>
 <script>
 (function () {
@@ -294,17 +320,11 @@ details.adv .hint{margin:4px 0 8px}
   var LOG_INTS = ["log_tool_tail_chars", "log_gzip_days", "log_keep_days"];   /* 运行记录：原样存的数，可以是 0 */
 
   function $(s) { return document.querySelector(s); }
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
-    });
-  }
+  /* 共用工具在 util.js 里 */
+  var esc = window.BXu.esc, api = window.BXu.apiRaw, toNum = window.BXu.toNum;
   function post(obj) { return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) }; }
-  function api(path, opts) { return fetch(path, opts).then(function (r) { return r.json(); }); }
-  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
 
-  /* ---------- 表格 ---------- */
-  /* ---------- 核心参数 ---------- */
+  /* ---------- 设置项 ---------- */
   var TIMES = ["dawn", "day", "dusk", "night"];
   function fillTimes(t) { t = t || {}; TIMES.forEach(function (k) { if (t[k]) { $("#t-" + k).value = t[k]; } }); }
   function fillLogs(s) {
@@ -324,10 +344,10 @@ details.adv .hint{margin:4px 0 8px}
   /* ---------- 保存：整页一个「保存」 ---------- */
   $("#btn-setsave").onclick = function () {
     var body = {};
-    PRMS.forEach(function (k) { body[k] = Math.max(1, num($("#s-" + k).value) || 1); });
-    ADV.forEach(function (k) { body[k] = Math.max(1, num($("#s-" + k).value) || 1) * 60; });
+    PRMS.forEach(function (k) { body[k] = Math.max(1, toNum($("#s-" + k).value) || 1); });
+    ADV.forEach(function (k) { body[k] = Math.max(1, toNum($("#s-" + k).value) || 1) * 60; });
     BOOLS.forEach(function (k) { body[k] = $("#s-" + k).checked; });
-    LOG_INTS.forEach(function (k) { body[k] = Math.max(0, Math.round(num($("#s-" + k).value))); });
+    LOG_INTS.forEach(function (k) { body[k] = Math.max(0, Math.round(toNum($("#s-" + k).value))); });
     body.log_full = $("#s-log_full").checked;
     body.office_theme_times = {};
     TIMES.forEach(function (k) { var v = $("#t-" + k).value; if (/^\d{2}:\d{2}$/.test(v)) { body.office_theme_times[k] = v; } });
@@ -336,7 +356,7 @@ details.adv .hint{margin:4px 0 8px}
       .then(function (r) {
         if (r && r.ok === false) {
           box.className = "hint";
-          box.textContent = T("st.notSaved", { why: r.text || r.code || "参数不对" });
+          box.textContent = T("st.notSaved", { why: r.text || r.code || T("st.badParam") });
           return;
         }
         PRMS.forEach(function (k) { $("#s-" + k).value = r[k]; });
@@ -353,12 +373,12 @@ details.adv .hint{margin:4px 0 8px}
   /* ---------- 自检：这里只报个总数，明细去 /doctor 看 ---------- */
   function loadDoctor() {
     return api("/api/doctor", { cache: "no-store" }).then(function (d) {
-      var fail = num((d.summary || {}).fail);
+      var fail = toNum((d.summary || {}).fail);
       $("#doc-sum").textContent = fail ? T("st.docFail", { n: fail }) : T("st.docOk");
     }).catch(function () { $("#doc-sum").textContent = T("st.docDown"); });
   }
 
-  /* ---------- 数据和隐私：读 /legal/privacy（仓库根目录的 PRIVACY.md）画出来 ---------- */
+  /* ---------- 隐私声明全文：只认标题 / 列表 / 段落 / `代码` / **粗体** 这几种写法，[文字](文件) 只显示文字 ---------- */
   function mdInline(s) {
     return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, "<b>$1</b>");     /* 链接只留文字：设置页不连外网，仓库里同名文件可点 */
@@ -378,17 +398,9 @@ details.adv .hint{margin:4px 0 8px}
     close();
     return out.join("");
   }
-  function loadPrivacy() {
-    fetch("/legal/privacy?lang=" + encodeURIComponent(BXi18n.lang()), { cache: "no-store" })
-      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
-      .then(function (t) { $("#privacyBox").innerHTML = mdBlocks(t); })
-      .catch(function () {
-        $("#privacyBox").innerHTML = '<div class="empty">' + esc(T("st.privacyFail")) + "</div>";
-      });
-  }
 
-  /* ---------- 许可证 / 第三方声明：在页面里开像素窗口，不跳系统浏览器（exe 窗口里新标签页是画蛇添足） ---------- */
-  function openLegal(id, path, title) {
+  /* ---------- 许可证 / 第三方声明 / 隐私声明：在页面里开像素窗口，不跳系统浏览器（exe 窗口里新标签页是画蛇添足） ---------- */
+  function openLegal(id, path, title, md) {
     var host = document.getElementById("bx-legal-" + id);
     if (!host) {
       host = document.createElement("div");
@@ -418,7 +430,7 @@ details.adv .hint{margin:4px 0 8px}
       if (!r.ok) { return Promise.reject(r.status); }
       return r.text();
     }).then(function (t) {
-      body.innerHTML = '<pre class="legal-full">' + esc(t) + "</pre>";
+      body.innerHTML = md ? '<div class="privacy">' + mdBlocks(t) + "</div>" : '<pre class="legal-full">' + esc(t) + "</pre>";
     }).catch(function () {
       body.innerHTML = '<div class="empty">' + esc(T("st.legalFail")) + "</div>";
     });
@@ -429,38 +441,26 @@ details.adv .hint{margin:4px 0 8px}
     if (btn) { btn.focus(); }
   }
   var LEGAL_BTNS = [
-    { id: "legal-license", path: "/legal/license", title: T("st.license") },
+    { id: "legal-privacy", path: "/legal/privacy", title: T("st.privacyTitle"), md: true },
+    { id: "legal-license", path: "/legal/license", title: T("st.licenseTitle") },
     { id: "legal-notices", path: "/legal/notices", title: T("st.notices") },
     { id: "legal-third-party", path: "/legal/third-party", title: T("st.thirdParty") }
   ];
   LEGAL_BTNS.forEach(function (b) {
     var el = document.getElementById(b.id);
-    if (el) { el.onclick = function () { openLegal(b.id, b.path, b.title); }; }
+    if (el) { el.onclick = function () { openLegal(b.id, b.path, b.title, b.md); }; }
   });
 
-  /* ---------- 临时文件：占多大 + 一键清理（在跑的卡不动） ---------- */
+  /* ---------- 占用空间：两个大小 + 一个「清理」（先清临时文件，再整理运行记录） ---------- */
+  function mb(b) { return (toNum(b) / 1048576).toFixed(1); }
   function loadTmp() {
     return api("/api/tmp", { cache: "no-store" }).then(function (r) {
-      var b = num(r && r.bytes);
-      $("#tmp-size").textContent = T("st.tmpSize", { n: (b / 1048576).toFixed(1) });
+      $("#tmp-size").textContent = T("st.tmpSize", { n: mb(r && r.bytes) });
     }).catch(function () { $("#tmp-size").textContent = T("st.unknown"); });
   }
-  $("#btn-tmpclean").onclick = function () {
-    var btn = this;
-    btn.disabled = true;
-    api("/api/tmp/clean", post({})).then(function (r) {
-      btn.disabled = false;
-      $("#tmp-msg").textContent = T("st.tmpCleaned", { n: num(r && r.removed), m: num(r && r.skipped) });
-      loadTmp();
-    }).catch(function (e) { btn.disabled = false; $("#tmp-msg").textContent = T("st.tmpFail", { why: String(e) }); });
-  };
-  loadTmp();
-
-  /* ---------- 数据目录：占多大 + 现在压缩结束的卡的运行记录（在后台整理，好了再刷新） ---------- */
-  function mb(b) { return (num(b) / 1048576).toFixed(1); }
   function loadData() {
     return api("/api/data", { cache: "no-store" }).then(function (r) {
-      $("#data-size").textContent = T("st.dataSize", { n: mb(r && r.bytes), l: mb(r && r.log_bytes), g: mb(r && r.gz_bytes) });
+      $("#data-size").textContent = T("st.dataSize", { n: mb(r && r.bytes) });
       return r || {};
     }).catch(function () { $("#data-size").textContent = T("st.unknown"); return {}; });
   }
@@ -468,16 +468,21 @@ details.adv .hint{margin:4px 0 8px}
     loadData().then(function (r) {
       if (r.cleaning) { setTimeout(function () { waitData(btn); }, 2000); return; }
       btn.disabled = false;
-      $("#data-msg").textContent = T("st.dataCleaned");
+      $("#space-msg").textContent = T("st.dataCleaned");
+      loadTmp();
     });
   }
-  $("#btn-dataclean").onclick = function () {
+  $("#btn-clean").onclick = function () {
     var btn = this;
     btn.disabled = true;
-    $("#data-msg").textContent = T("st.dataCleaning");
-    api("/api/data/clean", post({})).then(function () { waitData(btn); })
-      .catch(function (e) { btn.disabled = false; $("#data-msg").textContent = T("st.tmpFail", { why: String(e) }); });
+    $("#space-msg").textContent = T("st.cleaning");
+    api("/api/tmp/clean", post({})).then(function (r) {
+      $("#space-msg").textContent = T("st.tmpCleaned", { n: toNum(r && r.removed) });
+      return api("/api/data/clean", post({}));
+    }).then(function () { waitData(btn); })
+      .catch(function (e) { btn.disabled = false; $("#space-msg").textContent = T("st.tmpFail", { why: String(e) }); });
   };
+  loadTmp();
   loadData();
 
   /* ---------- 从旧版导入：先确认，再把旧文件夹换进来（后端不过就原样留着） ---------- */
@@ -524,7 +529,7 @@ details.adv .hint{margin:4px 0 8px}
   function doReset() {
     api("/api/reset", post({ confirm: true, force: false })).then(function (r) {
       if (r && r.code === "busy") {
-        askReset(T("st.resetBusy", { n: num(r.running) }), doForceReset);
+        askReset(T("st.resetBusy", { n: toNum(r.running) }), doForceReset);
         return;
       }
       showSteps(r);
@@ -549,7 +554,7 @@ details.adv .hint{margin:4px 0 8px}
       name.textContent = (s.ok ? "" : T("st.stepFail")) + s.name + "（" + (i + 1) + "/" + steps.length + "）";
       i += 1;
       setTimeout(tick, 160);
-    })();
+    }());
     var bad = steps.filter(function (s) { return !s.ok; });
     setTimeout(function () {
       if (bad.length) {
@@ -566,7 +571,7 @@ details.adv .hint{margin:4px 0 8px}
     box.className = "msg " + (kind || "info");
     box.textContent = text;
   }
-  /* ---------- 服务商清单：显示用的哪份，更新要联网先确认 ---------- */
+  /* ---------- 模型平台清单：显示用的哪份，更新要联网先确认 ---------- */
   function provLabel(m) {
     var d = m && m.updated ? m.updated : T("st.dateUnknown");
     return m && m.source === "data" ? T("st.updated", { d: d }) : T("st.snapshot", { d: d });
@@ -600,7 +605,7 @@ details.adv .hint{margin:4px 0 8px}
         return;
       }
       doProvUpdate(b);
-    }).catch(function (e) {
+    }).catch(function () {
       b.disabled = false;
       $("#prov-status").textContent = T("st.provFail");
     });
@@ -624,7 +629,6 @@ details.adv .hint{margin:4px 0 8px}
       var b = document.getElementById("lang-" + v);
       if (b) { b.classList.toggle("on", v === cur); }
     });
-    loadPrivacy();                                   /* 隐私声明也跟着换语言 */
   }
   ["zh", "en"].forEach(function (v) {
     var b = document.getElementById("lang-" + v);

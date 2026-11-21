@@ -41,6 +41,14 @@ class Watchdog(threading.Thread):
         self._badge()
         self._tmp_clean()
         self._scheduled_seen()
+        try:   # 之前因为找不到 Git Bash 被标「配置有问题」的猫：装好 git 就自己回来（别的配置错不会自己好）
+            self.d.release_no_git_bash()
+        except Exception:  # noqa: BLE001 - 自愈坏了不能带崩这一拍后面的步骤
+            pass
+        try:   # 查额度看到账户用满了：那几只先歇到重置，下面补开排队卡时就不会再派给它们
+            self.d.rest_spent_quota()
+        except Exception:  # noqa: BLE001 - 这一步坏了不能带崩这一拍后面的步骤
+            pass
         try:
             self.d.start_ready_queued()   # 自愈：排队里还有能开工的（比如核心重启过）就补开
         except Exception as e:  # noqa: BLE001

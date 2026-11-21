@@ -4,34 +4,30 @@
   "use strict";
   var NS = window.BXOB;
   var S = NS.S;
-  var num = NS.num;
+  var num = NS.num, dget = NS.dget;
 
   /* ================= 这一份文件的文案（中文 / 英文） ================= */
   NS.addTxt("flow", {
-    'askFirst': ['让我们来招募第一个打工猫猫吧！', 'Let\'s hire the first worker cat!'],
-    'askLater': ['招到打工猫才能派卡，去「工位」页招一只', 'You need a worker cat before the leader can hand out cards — hire one on the Stations page'],
-    'askMore': ['想招更多，去「工位」页', 'To hire more, go to the Stations page'],
+    'askFirst': ['来加第一个帮手吧！', 'Let\'s add the first helper!'],
+    'askLater': ['加一个帮手才能派活，去「帮手」页', 'Add a helper before work can be handed out — add one on the Helpers page'],
+    'askMore': ['想加更多，去「帮手」页', 'To add more, go to the Helpers page'],
     'done.backToChat': [
-      '回到刚才贴那段话的 AI 对话里，跟首领说一句要办的事，比如：',
-      'Go back to the chat where you pasted that text and tell the leader what to do, ' +
-        'for example:'
+      '回到你的编程助手，说一句「把 XX 派给帮手」。',
+      'Back in your coding assistant, say “hand XX to the helpers”.'
     ],
-    'done.copyExample': ['复制这句', 'Copy this'],
-    'done.example': ['帮我派一张卡：给 README.md 加一段「怎么安装」的说明。', 'Make me a card: add a “How to install” section to README.md.'],
-    'done.goStations': ['招一只，回来就能跟首领说「帮我派一张卡：……」。', 'Hire one, then tell the leader: “Make me a card: …”'],
+    'done.dispatchBtn': ['在 Cursor 里派活', 'Dispatch in Cursor'],
+    'done.goStations': ['加一个，回来就能说「把 XX 派给帮手」。', 'Add one, then come back and say “hand XX to the helpers”.'],
     'done.hint': [
-      '换了新对话的话，先贴一遍上岗那段话，再发这句。首领派出去的卡、打工猫干活，都会在办公室和「看板」里看到。',
-      'If you start a new chat, paste that text again before sending this. ' +
-        'The cards the leader hands out and the work the worker cats do show up in the office and ' +
-        'on the Board.'
+      '派出去的活、帮手干的活，都会在办公室和「任务」页里看到。',
+      'Dispatched work and helper runs show up in the office and on the Tasks page.'
     ],
     'done.lookOffice': ['先看看办公室', 'Look at the office'],
-    'done.noMember': ['还没有打工猫，首领现在派不了卡（它只派活、不自己干）。', 'No worker cat yet, so the leader cannot hand out cards (it only hands out work).'],
+    'done.noMember': ['还没有帮手，编程助手现在派不了活。它只派活、不自己干。', 'No helper yet, so your coding assistant cannot hand out work. It only hands work out.'],
     'done.okBtn': ['好的', 'OK'],
-    'done.stationsLink': ['「工位」页', 'Stations page'],
-    'done.titleLeaderOnly': ['首领到岗了', 'The leader is on duty'],
+    'done.stationsLink': ['「帮手」页', 'Helpers page'],
+    'done.titleLeaderOnly': ['编程助手到岗了', 'Your coding assistant is on duty'],
     'done.titleReady': ['可以派活了', 'Ready for work'],
-    'startRecruit': ['开始招募', 'Start hiring'],
+    'startRecruit': ['加一个帮手', 'Add a helper'],
   });
 
   /* ================= 常量 ================= */
@@ -56,9 +52,6 @@
     neck: ["scarf", "bell", "tie", "bandana"], ears: ["phones"], body: ["hoodie"]
   };
   var SLOT_KEYS = ["head", "face", "neck", "ears", "body"];
-
-  /* 上岗结束给一句能直接复制的派卡示范 */
-  var DISPATCH_EXAMPLE = NS.tx("flow.done.example");
 
   /* ================= 随机配饰 / 选号 ================= */
   /* 招募用的随机配饰：0–3 件、槽位不重复、永远不出王冠（跟核心 looks.py 的 random_look 同一套规则） */
@@ -102,9 +95,7 @@
   var FLOW = [
     NS.sceneAnim("box_in", { name: "box_in", slot: "leader", couriers: [courierLook(), courierLook()] }),
     { key: "welcome", run: NS.stepWelcome },
-    { key: "leader", run: NS.stepRecruitLeader },
-    { key: "leader_access", run: NS.stepLeaderAccess },
-    { key: "leader_connect", run: NS.stepLeaderConnect },
+    { key: "leader_install", run: NS.stepInstallLeader },
     NS.sceneAnim("box_open", { name: "box_open", slot: "leader", look: null }),
     NS.sceneAnim("crown", { name: "crown", slot: "leader" }),
     NS.sceneAnim("say_start", { name: "say", slot: "leader", text: NS.tx("flow.askFirst") }, NS.tx("flow.startRecruit")),
@@ -133,9 +124,13 @@
     });
   }
   NS.fillScene = fillScene;
+  /* 老进度里拆成三步的那段（招首领 / 接入方式 / 接首领）现在并成一步 */
+  var LEGACY_LEADER = { leader: 1, leader_access: 1, leader_connect: 1 };
+  function stepKey() { return LEGACY_LEADER[S.prog.step] ? "leader_install" : S.prog.step; }
   function startIndex() {
+    var step = stepKey();
     for (var i = 0; i < FLOW.length; i++) {
-      if (FLOW[i].key === S.prog.step) { return i; }
+      if (FLOW[i].key === step) { return i; }
     }
     return 0;
   }
@@ -160,23 +155,21 @@
     });
   }
 
-  /* ---------- 收尾 ----------
-     上岗结束别停在空办公室不知道说啥——给一句能直接复制的派卡示范，说清楚贴回哪个对话。
-     这一步一出来就记成 done：刷新以后不再弹，办公室空态里有同一句话。 */
+  /* 上岗结束：不再给要复制的派卡示范，只说一句回编程助手里怎么说；Cursor 再给一键派活按钮 */
   function stepDone() {
     NS.closeWin();
     return new Promise(function (res) {
       setTimeout(function () {                   /* 首领说完那句停 3 秒，再弹收尾窗口 */
         NS.setStep("done");
+        var isCursor = String(dget("leader_client", "")) === "cursor";
         var body = S.skipMember
           ? "<p>" + NS.esc(NS.tx("flow.done.noMember")) + "</p>" +
             '<p>去<a href="/stations">' + NS.esc(NS.tx("flow.done.stationsLink")) + "</a>" +
             NS.esc(NS.tx("flow.done.goStations")) + "</p>"
           : "<p>" + NS.esc(NS.tx("flow.done.backToChat")) + "</p>" +
-            '<pre id="ob-example">' + NS.esc(DISPATCH_EXAMPLE) + "</pre>" +
-            '<button type="button" class="pxb small" id="ob-copy-example">' +
-            NS.esc(NS.tx("flow.done.copyExample")) + "</button>" +
-            '<p class="hint">' + NS.esc(NS.tx("flow.done.hint")) + "</p>";
+            '<p class="hint">' + NS.esc(NS.tx("flow.done.hint")) + "</p>" +
+            (isCursor ? '<p style="margin-top:10px"><a class="pxb main" id="ob-dispatch" href="#">' +
+              NS.esc(NS.tx("flow.done.dispatchBtn")) + "</a></p>" : "");
         var w = NS.win({
           title: S.skipMember ? NS.tx("flow.done.titleLeaderOnly") : NS.tx("flow.done.titleReady"),
           titleKey: S.skipMember ? "flow.done.titleLeaderOnly" : "flow.done.titleReady",
@@ -186,15 +179,22 @@
             on: function (x) { x.close(); res(); }
           }]
         });
-        var cp = w.$("#ob-copy-example");
-        if (cp) { cp.onclick = function () { NS.copyText(DISPATCH_EXAMPLE, this); }; }
+        if (isCursor) {
+          NS.api("/api/connectors/snippet?client=cursor&station=" + encodeURIComponent(S.leaderName || "") +
+            NS.langParam2()).then(function (r) {
+            var a = w.$("#ob-dispatch");
+            if (!a) { return; }
+            if (r.ok && r.data.dispatch_link) { a.href = r.data.dispatch_link; }
+            else { a.remove(); }
+          });
+        }
       }, 3000);
     });
   }
 
   /* ================= 入口 ================= */
   /* 已经有首领（工位页 / 接口登记的，或者上岗进度丢了）时，不能从「欢迎」重来一遍。
-     按核心推导的 step 定一个最早能开始的步骤：4 = 首领还没来握手 → 接首领；6 = 还没打工猫 → 招打工猫。
+     按核心推导的 step 定一个最早能开始的步骤：4 = 首领还没来握手 → 装进编程助手那一步；6 = 还没帮手 → 加一个帮手。
      跳过去的那几段动画记成播过，run() 会用 instant 把箱子 / 王冠摆回去。 */
   function keyIndex(k) {
     for (var i = 0; i < FLOW.length; i++) { if (FLOW[i].key === k) { return i; } }
@@ -202,13 +202,13 @@
   }
   function floorStep(state, lead) {
     var floor = null;
-    if (state.step === 4 && lead) { floor = lead.client ? "leader_connect" : "leader_access"; }
+    if (state.step === 4 && lead) { floor = "leader_install"; }
     else if (state.step === 6 && lead) { floor = "member"; }
     if (!floor) { return; }
     var fi = keyIndex(floor);
-    /* 只在进度是空的、或者还停在「建首领」之前时才往后挪；进度已经走到接首领以后就照进度接着做
-       （首领刚握完手、进度停在 leader_connect 时，要先给「已连接」和开箱 / 王冠，不能跳过） */
-    if (keyIndex(S.prog.step) >= keyIndex("leader_access")) { return; }
+    /* 只在进度是空的、或者还停在「装编程助手」之前时才往后挪；进度已经走到那以后就照进度接着做
+       （首领刚握完手、进度停在装那一步时，要先给「已连上」和开箱 / 王冠，不能跳过） */
+    if (keyIndex(stepKey()) >= keyIndex("leader_install")) { return; }
     FLOW.slice(0, fi).forEach(function (s) {
       if (s.anim && S.prog.played.indexOf(s.anim.key) < 0) { S.prog.played.push(s.anim.key); }
     });

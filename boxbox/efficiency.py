@@ -3,6 +3,9 @@
 模型时间和命令时间在收工时已经记进 runs.split_json。老运行没有这列，对应的格子是空。
 命中率 = 读缓存 / (入 + 读缓存)，和办公室抽屉同一把尺子。
 有公开单价的按单价估一个钱（tokens.cost_est）；单价全是 0 的套餐只报用量。
+
+每张卡还分三段：等开工（派活 → 第一次开工）、干活（开工 → 交回）、等验收（交回 → 确认）。
+可以按首领（dispatcher）和批次（goal）筛，筛了就列全部匹配的卡，不截前 10。
 """
 from __future__ import annotations
 
@@ -14,7 +17,7 @@ from . import config, tokens
 _PROBE = {"tok_in": 1_000_000, "tok_out": 1_000_000, "tok_cr": 1_000_000, "tok_cw": 1_000_000}
 
 
-def report(store, days=7) -> dict:
+def report(store, days=7, dispatcher=None, goal=None) -> dict:
     days = _days(days)
     now = _dt.datetime.now().astimezone().replace(microsecond=0)
     since = now - _dt.timedelta(days=days)
@@ -54,6 +57,25 @@ def report(store, days=7) -> dict:
         row["station"] = g.get("station") or ""
         card_rows.append(row)
     card_rows.sort(key=lambda r: (-r["turns"], -r["usage"], r["task_id"]))
+    events = _event_times(store, since_iso)
+    scope = []
+    for row in card_rows:
+        tid = row["task_id"]
+        t = _task_of(store, tid)
+        if dispatcher and str(t.get("dispatcher") or "") != str(dispatcher):
+            continue
+        card = t.get("card") or {}
+        if goal and str(card.get("goal") or "").strip() != str(goal).strip():
+            continue
+        row.update(_timing(store, tid, t, events))
+        row["dispatcher"] = str(t.get("dispatcher") or "")
+        row["goal"] = str(card.get("goal") or "")
+        scope.append((row, t))
+    listed = [r for r, _ in scope]
+    if not (dispatcher or goal):
+        listed = listed[:10]           # 没筛的时候还是只列花得最多的 10 张
+    timing = _timing_summary(scope)
+    timing["listed"] = len(listed)
     return {
         "days": days,
         "since": since_iso,
@@ -61,8 +83,71 @@ def report(store, days=7) -> dict:
         "accept_wait_s": _wait(store.tasks_done_since(since_iso), since),
         "split": _split_sum(split_rows),
         "cats": cat_rows,
-        "cards": card_rows[:10],
+        "cards": listed,
+        "timing": timing,
+        "dispatcher": str(dispatcher or ""),
+        "goal": str(goal or ""),
     }
+
+
+def _task_of(store, task_id: str) -> dict:
+    try:
+        return store.get_task(task_id) or {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _event_times(store, since_iso: str) -> dict:
+    """每张卡「交回等确认」和「确认完成」的最晚时间。事件正文很大，只取时间和种类。"""
+    sql = ("SELECT task_id, kind, MAX(ts) ts FROM events WHERE task_id IS NOT NULL AND ts>=? "
+           "AND kind IN ('reviewing','done') GROUP BY task_id, kind")
+    with store.lock:
+        rows = [dict(r) for r in store.db.execute(sql, (since_iso,)).fetchall()]
+    return {(r["task_id"], r["kind"]): r["ts"] for r in rows}
+
+
+def _timing(store, task_id: str, t: dict, events: dict) -> dict:
+    """一张卡的三段时间：等开工、干活、等验收。缺一环就是空，不猜。"""
+    starts = sorted(s for s in (_parse(r.get("started")) for r in store.runs_for_task(task_id)) if s)
+    first_start = starts[0] if starts else None
+    review_raw = events.get((task_id, "reviewing"))
+    review_at = _parse(review_raw) or _parse(t.get("delivered_at"))
+    done_at = _parse(events.get((task_id, "done"))) or _parse(t.get("done_at"))
+    work_start = None
+    if review_at is not None:
+        earlier = [s for s in starts if s <= review_at]
+        work_start = earlier[-1] if earlier else None
+    elif first_start is not None:
+        work_start = first_start
+    return {
+        "wait_start_s": _dur(_parse(t.get("created_at")), first_start),
+        "work_s": _dur(work_start, review_at),
+        # 没交回等确认过就没有「等验收」这回事
+        "wait_review_s": _dur(review_at, done_at) if review_raw else None,
+        "done": bool(events.get((task_id, "done")) or t.get("done_at")),
+        "round": int(t.get("round") or 1),
+    }
+
+
+def _timing_summary(scope: list) -> dict:
+    def med(key):
+        return _median([r.get(key) for r, _ in scope if r.get(key) is not None])
+    finished = [r for r, _ in scope if r.get("done")]
+    passed = sum(1 for r in finished if int(r.get("round") or 1) <= 1)
+    return {
+        "wait_start_s": med("wait_start_s"),
+        "work_s": med("work_s"),
+        "wait_review_s": med("wait_review_s"),
+        "pass_rate": int(round(100.0 * passed / len(finished))) if finished else None,
+        "cards": len(scope),
+        "finished": len(finished),
+    }
+
+
+def _dur(start, end):
+    if start is None or end is None or end < start:
+        return None
+    return int(round((end - start).total_seconds()))
 
 
 def _days(days) -> int:

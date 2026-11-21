@@ -1,4 +1,4 @@
-/* 工位页「再加一个首领」：填名字，登记成首领，再复制和「叫醒首领」同一段话。 */
+/* 帮手页「再加一个编程助手」：填名字，登记成编程助手，再复制和「叫醒编程助手」同一段话。 */
 (function () {
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
   function $(s) { return document.querySelector(s); }

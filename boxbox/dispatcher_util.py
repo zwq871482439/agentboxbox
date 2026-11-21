@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import datetime as _dt
+import functools
 import json
+import os
 import pathlib
 import subprocess
 
@@ -39,13 +41,28 @@ def _every_min(st: dict) -> int:
         return 30
 
 
-def _mins_since(iso) -> float:
+def _mins_since(iso, default=0.0) -> float | None:
+    """距现在多少分钟；时间读不出来（没给 / 格式不对）就返回 default。"""
     if not iso:
-        return 0.0
+        return default
     try:
         return (_dt.datetime.now().astimezone() - _dt.datetime.fromisoformat(str(iso))).total_seconds() / 60
     except (TypeError, ValueError):
-        return 0.0
+        return default
+
+
+def _elapsed(started, now=None) -> float | None:
+    """ISO 时间 → 到现在过了多少秒；时间读不出来返回 None。没带时区的按本地时间算。"""
+    if not started:
+        return None
+    try:
+        start = _dt.datetime.fromisoformat(str(started))
+    except (TypeError, ValueError):
+        return None
+    ref = now or _dt.datetime.now().astimezone()
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=ref.tzinfo)
+    return (ref - start).total_seconds()
 
 
 def _default_workdir(station_id: str):
@@ -61,11 +78,39 @@ def _git_head(cwd) -> str | None:
         return None
     try:
         p = subprocess.run(["git", "-C", str(cwd), "rev-parse", "HEAD"], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=10, shell=False)
+                           encoding="utf-8", errors="replace", timeout=10, shell=False,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.SubprocessError):
         return None
     out = (p.stdout or "").strip()
     return out if p.returncode == 0 and len(out) >= 7 else None
+
+
+# 同一个目录是不是仓库、属于哪个仓库几乎不变；派卡在调度锁里对每张开着的卡都要问一次 git，
+# 按 cwd 记住结果免得整个调度陪着等（变了最多少一条撞车提醒）
+@functools.lru_cache(maxsize=256)
+def _git_repo_info(cwd) -> tuple[str, str, str] | None:
+    """(仓库的公共 git 目录, 工作树根, cwd 相对根的前缀)；不是仓库就 None。
+    worktree 共用一个公共 git 目录，靠它认出「同一个仓库」，哪怕两张卡在两个 worktree 里。"""
+    if not cwd:
+        return None
+    try:
+        p = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--git-common-dir", "--show-toplevel", "--show-prefix"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, shell=False,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if p.returncode != 0:
+        return None
+    lines = [ln.strip() for ln in (p.stdout or "").splitlines()]
+    if len(lines) < 3 or not lines[0] or not lines[1]:
+        return None
+    common, top, prefix = lines[0], lines[1], lines[2]
+    if not os.path.isabs(common):
+        common = os.path.join(str(cwd), common)
+    common = os.path.normcase(os.path.normpath(os.path.abspath(common)))
+    top = os.path.normcase(os.path.normpath(os.path.abspath(top)))
+    return common, top, prefix.replace("\\", "/")
 
 
 def _hhmm(ts) -> str:

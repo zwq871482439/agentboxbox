@@ -14,7 +14,8 @@ TASK_ID_RE = re.compile(config.TASK_ID_RE)
 KINDS = ("code", "doc", "data", "run", "review")
 REVIEW_MODES = ("leader", "user", "none")
 
-# state -> {event: next_state}
+# state -> {event: next_state}。只管首领和帮手手动推状态的两条路（report / resolve）能不能走，
+# 不是完整状态机：别处改状态都直接写库、不查这张表（比如猫歇着把在跑的卡放回 queued）。
 TRANSITIONS = {
     "queued":     {"start": "dispatched", "cancel": "cancelled", "redispatch": "dispatched"},   # redispatch: 等接口的排队卡首领也能重派
     "dispatched": {"heartbeat": "running", "done": "delivered", "exit_ok": "delivered", "blocked": "blocked",

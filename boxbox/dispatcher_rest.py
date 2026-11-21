@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as _dt
 import re
 
-from . import classify, config, i18n, pi_config
+from . import classify, config, i18n, pi_config, quota
 from .dispatcher_const import (
     CONFIG_KV,
     REST_BACKOFF,
@@ -12,9 +12,24 @@ from .dispatcher_const import (
     REST_REASONS,
     REST_TRY_KV,
     WAIT_NETWORK,
+    WAIT_REASON_KEY,
     WAIT_REST,
 )
+from .runners import pi as pi_runner
 from .store import now_iso
+
+# 配置问题里唯一会自己好的一种：Windows 上找不到 Git Bash，装好 git 就能开工（看门狗每拍查一次）
+CONFIG_NO_GIT_BASH = "no_git_bash"
+# 歇着的「几点回来」：今天的只写「时:分」，别的日子带上「月-日」，周额度常常要等好几天
+_CLOCK_HINT = re.compile(r"^(?:\d{2}-\d{2} )?\d{1,2}:\d{2}$")
+
+
+def _hint_at(back_at: str, now: _dt.datetime) -> str:
+    try:
+        at = _dt.datetime.fromisoformat(back_at).astimezone(now.tzinfo)
+    except ValueError:
+        return ""
+    return at.strftime("%H:%M") if at.date() == now.date() else at.strftime("%m-%d %H:%M")
 
 
 class RestMixin:
@@ -30,7 +45,7 @@ class RestMixin:
         lg = lang or i18n.lang()
         if not hint:
             return i18n.t("rest.when.later", lg)
-        if re.match(r"^\d{1,2}:\d{2}$", hint):
+        if _CLOCK_HINT.match(hint):
             return i18n.t("rest.when.hhmms", lg, t=hint)
         m = re.match(r"^(\d+)\s*(?:分钟后|分钟|min|minutes?)$", hint)
         if m:                      # 老数据里存的是「2 分钟后」这种带单位的
@@ -43,7 +58,7 @@ class RestMixin:
         lg = lang or i18n.lang()
         if not hint:
             return i18n.t("rest.when.later", lg)
-        if re.match(r"^\d{1,2}:\d{2}$", hint):
+        if _CLOCK_HINT.match(hint):
             return i18n.t("rest.hint.hhmms", lg, t=hint)
         m = re.match(r"^(\d+)\s*(?:\u5206\u949f\u540e|\u5206\u949f|min|minutes?)$", hint)
         if m:                      # \u8001\u6570\u636e\u91cc\u5b58\u7684\u662f\u300c2 \u5206\u949f\u540e\u300d\u8fd9\u79cd\u5e26\u5355\u4f4d\u7684
@@ -51,7 +66,7 @@ class RestMixin:
         return i18n.t("rest.hint.minutes", lg, t=hint)
     @staticmethod
     def rest_word(entry: dict, lang: str | None = None) -> str:
-        """歇着的状态词：出去玩了，预计 01:54 回来（额度用完）/ 出去玩了，过一会儿再试（接口连不上）。"""
+        """歇着的状态词：歇着：额度用完，预计 01:54 回来 / 歇着：接口连不上，过一会儿再试。"""
         lg = lang or i18n.lang()
         reason = str(entry.get("reason") or "")
         why = i18n.t("rest.reason." + reason, lg) if reason in REST_REASONS else \
@@ -60,7 +75,7 @@ class RestMixin:
     def mark_resting(self, sid: str, reason: str, back_at: str | None = None, hint: str = "",
                      why: str = "", tries: int | None = None) -> dict:
         """这只猫歇着（额度用完 / 被限流 / 接口连不上 / 服务端出错）：核心自动判、自动解除。
-        同样原因已经在歇着了就只更新时间，不重复喊「出去玩了」。"""
+        同样原因已经在歇着了就只更新时间，不重复喊一遍。"""
         with self.lock:
             data = dict(self.resting())
             old = data.get(sid) or {}
@@ -112,21 +127,49 @@ class RestMixin:
             if secs is not None:
                 back_at = (now + _dt.timedelta(seconds=secs)).astimezone().isoformat(timespec="seconds")
                 hint = str(max(1, int(round(secs / 60))))   # 只存数字：显示时再按语言写成「几分钟」
+        if back_at and _dt.datetime.fromisoformat(back_at) <= now:
+            back_at, hint = None, ""          # 写的时刻已经过了（老消息 / 时钟对不上）：按退避，别每拍都重试
         if back_at and not hint:
-            try:
-                hint = _dt.datetime.fromisoformat(back_at).strftime("%H:%M")
-            except ValueError:
-                hint = ""
+            hint = _hint_at(back_at, now)
         if not back_at:
             # 拿不到恢复时间：按退避来（2、5、10、20 分钟，之后每 20 分钟）
             n = self._bump_rest_tries(sid)
             mins = REST_BACKOFF[min(n, len(REST_BACKOFF)) - 1]
             back_at = (now + _dt.timedelta(minutes=mins)).astimezone().isoformat(timespec="seconds")
-            hint = str(mins)
-            return self.mark_resting(sid, reason, back_at=back_at, hint=hint, why=err, tries=n)
-        self._bump_rest_tries(sid)
-        return self.mark_resting(sid, reason, back_at=back_at, hint=hint, why=err,
-                                  tries=self.rest_tries(sid))
+            entry = self.mark_resting(sid, reason, back_at=back_at, hint=str(mins), why=err, tries=n)
+        else:
+            self._bump_rest_tries(sid)
+            entry = self.mark_resting(sid, reason, back_at=back_at, hint=hint, why=err, tries=self.rest_tries(sid))
+        if reason == "quota":
+            self._rest_peers(sid, entry)
+        return entry
+    def _rest_peers(self, sid: str, entry: dict) -> None:
+        """额度是按账户算的：同一把 key 的别的帮手一起歇到同一时刻，别轮着去撞同一堵墙。
+        手上正在跑的不动（它自己撞上会自己歇）。"""
+        running = {r.get("station") for r in self.store.open_runs()}
+        for peer in quota.peers(config.station(sid) or {}):
+            cur = self.rest_of(peer) or {}
+            if peer in running or cur.get("reason") == "quota":
+                continue
+            self.mark_resting(peer, "quota", back_at=entry.get("back_at"), hint=entry.get("hint") or "",
+                              why=entry.get("why") or "")
+    def rest_spent_quota(self) -> int:
+        """查额度看到账户用满了（某个窗口 ≥100%、重置还没到）：这个账户的帮手歇到重置，
+        不再接活也不再一轮轮去试。看门狗每拍查一次（只读 kv 里已有的查询结果，不联网）。"""
+        now = _dt.datetime.now().astimezone()
+        running = {r.get("station") for r in self.store.open_runs()}
+        n = 0
+        for st in config.stations():
+            sid = str(st.get("id") or "")
+            if st.get("client") != "pi" or not st.get("enabled", True) or sid in running:
+                continue
+            if (self.rest_of(sid) or {}).get("reason") == "quota":
+                continue
+            until = quota.spent_until(quota.read(self.store, st), now)
+            if until:
+                self.mark_resting(sid, "quota", back_at=until, hint=_hint_at(until, now), why="quota check: 100%")
+                n += 1
+        return n
     def clear_resting(self, sid: str) -> bool:
         """猫回来了：清掉歇着状态（事件在接上卡的时候发）。"""
         with self.lock:
@@ -147,9 +190,11 @@ class RestMixin:
         """到点的歇着的猫回来：清状态 → 变回「闲」→ 按先来后到接排队的卡。返回回来的猫数。"""
         now = _dt.datetime.now().astimezone()
         back = []
+        network_waiting = {t["assignee"] for t in self.store.list_tasks(state="queued")
+                           if (t.get("card") or {}).get(WAIT_REASON_KEY) == WAIT_NETWORK}
         for sid, entry in (self.resting() or {}).items():
-            if entry.get("reason") == "network":
-                continue                      # 接口连不上：等 探测（探通了自然回来），不按点自愈
+            if entry.get("reason") == "network" and sid in network_waiting:
+                continue                      # 还有等接口的卡：等探通，不按点自愈
             ba = entry.get("back_at")
             if not ba:
                 continue                      # 没定回来时刻的：等下一次再说
@@ -200,13 +245,14 @@ class RestMixin:
         """给用户看的服务商原话：去掉密钥，压成一行，只留前 200 字。"""
         text = classify.mask(str(err or "")).replace("\r", " ").replace("\n", " ").strip()
         return text[:200]
-    def mark_config_bad(self, sid: str, err: str) -> dict:
-        """记一笔「配置有问题」。不写回来时刻：到点也不会自己变回闲。"""
+    def mark_config_bad(self, sid: str, err: str, reason: str = "") -> dict:
+        """记一笔「配置有问题」。不写回来时刻：到点也不会自己变回闲（reason=CONFIG_NO_GIT_BASH 的例外，
+        那种装好 git 就能开工，看门狗每拍查一次）。"""
         why = self.config_quote(err)
         with self.lock:
             data = dict(self.config_bads())
             old = data.get(sid) or {}
-            entry = {"why": why, "since": old.get("since") or now_iso()}
+            entry = {"why": why, "since": old.get("since") or now_iso(), "reason": reason}
             data[sid] = entry
             self.store.kv_set(CONFIG_KV, data)
         return entry
@@ -229,9 +275,16 @@ class RestMixin:
         self.store.event("config_ok", i18n.t("ev.config_ok", self.lang(), sid=sid), sid)
         self.start_ready_queued()
         return True
+    def release_no_git_bash(self) -> int:
+        """被标「找不到 Git Bash」的猫：现在找得到了就自动恢复（别的配置错不会自己好，不走这里）。
+        release_config_bad 里会接着把排队的卡开起来。"""
+        stuck = [sid for sid, e in (self.config_bads() or {}).items() if e.get("reason") == CONFIG_NO_GIT_BASH]
+        if not stuck or not pi_runner._git_bash_dir():
+            return 0
+        for sid in stuck:
+            self.release_config_bad(sid)
+        return len(stuck)
     def _config_failure(self, res) -> bool:
-        """这次失败是不是配置错了：退出码 13，或报错文字归成 auth（密钥不对 / 模型 id 不存在）。"""
-        if int(getattr(res, "exit", 0) or 0) == classify.EXIT_CODES["auth"]:
-            return True
-        text = "%s\n%s" % (getattr(res, "error", "") or "", getattr(res, "iface_error", "") or "")
-        return classify.classify(text) == "auth"
+        """这次失败是不是配置错了：只认退出码 13（Pi 收尾时已把 auth 类报错转成 13）。
+        不看报错文字：超时的报错里带着命令本身，pytest -k test_invalid_token 会被冤枉成密钥错了。"""
+        return int(getattr(res, "exit", 0) or 0) == classify.EXIT_CODES["auth"]

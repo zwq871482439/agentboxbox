@@ -16,6 +16,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import sys
 import urllib.request
 from pathlib import Path
@@ -114,6 +115,31 @@ def check_pi(stations: list[dict] | None = None, lang: str | None = None) -> Che
         return Check("pi", label, True, i18n.t("doctor.pi.system", lang, ver=ver, cli=rt["cli"]), "")
     return Check("pi", label, False, i18n.t("doctor.pi.missing", lang),
                  i18n.t("doctor.pi.missing.fix", lang, pkg=PI_NPM_PKG))
+
+
+def check_git_bash(lang: str | None = None) -> Check:
+    """猫的命令要跑在 Git Bash 里。Windows 上找不到 Git 就是真问题（别的平台用系统的 bash）。"""
+    from .runners import pi as pi_runner
+    label = i18n.t("doctor.label.git_bash", lang)
+    if not pi_runner.IS_WIN:
+        return Check("git_bash", label, None, i18n.t("doctor.git_bash.win_only", lang), "")
+    gb = pi_runner._git_bash_dir()
+    if not gb:
+        return Check("git_bash", label, False, i18n.t("doctor.git_bash.missing", lang),
+                     i18n.t("doctor.git_bash.missing.fix", lang))
+    return Check("git_bash", label, True, i18n.t("doctor.git_bash.ok", lang, path=gb), "")
+
+
+def check_rg(lang: str | None = None) -> Check:
+    """ripgrep 只是快一点：没有不算错，只是猫会改用 grep。自带的优先于系统里装的。"""
+    from . import pi_config
+    label = i18n.t("doctor.label.rg", lang)
+    if pi_config.tools_bin() is not None:
+        return Check("rg", label, True, i18n.t("doctor.rg.bundled", lang), "")
+    rg = shutil.which("rg")
+    if rg:
+        return Check("rg", label, True, i18n.t("doctor.rg.ok", lang, path=rg), "")
+    return Check("rg", label, None, i18n.t("doctor.rg.missing", lang), "")
 
 
 def check_pi_key(station: dict, lang: str | None = None) -> Check:
@@ -270,6 +296,8 @@ def run(core_url: str | None = None, data_dir=None, stations=None,
     out.append(safe("leader", i18n.t("doctor.label.leader", lang), check_leader, sts, lang))
     out.append(safe("core", i18n.t("doctor.label.core", lang), check_core, core_url, 2.0, lang))
     out.append(safe("pi", i18n.t("doctor.label.pi", lang), check_pi, sts, lang))
+    out.append(safe("git_bash", i18n.t("doctor.label.git_bash", lang), check_git_bash, lang))
+    out.append(safe("rg", i18n.t("doctor.label.rg", lang), check_rg, lang))
     for s in sts:
         sid = str(s.get("id") or "")
         if not is_box_run_station(s):     # 盒子自己拉起的工位不用在 AI 软件里连猫猫盒子

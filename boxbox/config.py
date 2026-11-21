@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import sys
 import threading
 import time
@@ -18,6 +19,7 @@ DATA = pathlib.Path(os.environ.get("BOXBOX_DATA") or ROOT / "data")
 # 临时文件统一放程序目录 tmp\：每张卡一个子目录。完成或撤掉马上清，失败或中断留几天（data\ 不能随便删）。
 TMP = pathlib.Path(os.environ.get("BOXBOX_TMP") or ROOT / "tmp")
 TASK_ID_RE = r"^\d{8}-\d{3}$"
+LABEL_MAX = 24   # 帮手显示名（label）最多多少字：工牌和办公室猫脚下的名字都放得下
 
 # 固定 7 个工位：首领占 leader，打工猫按 A→F 占位置。工位满了就是 6 只打工猫。
 LEADER_SLOT = "leader"
@@ -41,6 +43,9 @@ SETTINGS_DEFAULTS = {
     "scene_bubbles": True,      # 办公室场景：首领冒不冒庆祝 / 复盘的邀请气泡（场景本身照演）
     "onboard": {},              # 上岗进度（§5）：{"step": 步骤名, "played": [播过的动画], "draft": 填到一半的表单}
     "member_feedback": False,   # 首领验收时给的一句约束记进打工猫的说明（默认关）
+    "ponytail": "full",         # 代码卡带少写代码的规则：off / lite / full
+    "search_tools": False,     # 帮手找代码时多给 grep / ls 两个工具（Pi 自带，默认关，还在试）
+    "repo_map": False,        # 派代码卡时附一页仓库地图（默认关，还在试；开关之后放进「能力」页）
     "member_feedback_max_chars": 800,   # 那段说明最多多少字，超了挤掉最旧的
     "tmp_keep_days": 1,        # 失败或中断的临时目录留几天；完成和撤掉的马上清，在跑的不动
     # 运行记录（data/tasks/<卡号>/run-N.log），见 boxbox/runlog.py
@@ -59,7 +64,7 @@ SETTINGS_DEFAULTS = {
 
 
 # 设置里只认这些键：老版本留下的键读的时候忽略、存的时候丢掉，不认的键不会把核心带崩
-SETTINGS_KEYS = frozenset(SETTINGS_DEFAULTS) | {"trigger"}
+SETTINGS_KEYS = frozenset(SETTINGS_DEFAULTS)
 
 _WRITE_LOCK = threading.RLock()          # data/*.json 的读和写共用一把锁
 
@@ -70,7 +75,14 @@ def _read_json(path: pathlib.Path, default):
         try:
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
-        except (OSError, ValueError):
+        except OSError:
+            return default
+        except ValueError:
+            # 读不懂先原样另存再当默认值：手改坏的 stations / 断电留下的 0 字节，不存底就回不来了
+            try:
+                shutil.copyfile(path, path.with_name(path.name + ".bad"))
+            except OSError:
+                pass
             return default
 
 
@@ -85,13 +97,19 @@ def _replace(tmp: pathlib.Path, path: pathlib.Path) -> None:
             time.sleep(0.02)
 
 
-def _write_json(path: pathlib.Path, obj) -> None:
+def _write_json(path: pathlib.Path, obj, **dump_kw) -> None:
+    """原子写 JSON：dump_kw 透传给 json.dump（有的地方要别的缩进 / 分隔符）。"""
+    kw = {"ensure_ascii": False, "indent": 1}
+    kw.update(dump_kw)
     with _WRITE_LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
         # tmp 文件名带线程 id：两个请求同时写同一个文件时（上岗流程会连着存进度）不会互相抢同一个 .tmp
         tmp = path.with_name("%s.%d.tmp" % (path.name, threading.get_ident()))
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=1)
+            json.dump(obj, f, **kw)
+            # 先落稳再换名：断电时目标文件不会只剩半截
+            f.flush()
+            os.fsync(f.fileno())
         _replace(tmp, path)
 
 

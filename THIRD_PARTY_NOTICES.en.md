@@ -14,6 +14,7 @@ agentboxbox's own code is MIT-licensed (see [LICENSE](LICENSE)). This file expla
 | File | Source | Licence |
 |---|---|---|
 | `static/tabler/tabler.min.css` | Tabler 1.6.1 (built on Bootstrap) | MIT, full text in `static/tabler/LICENSE`, the header comment is kept |
+| `boxbox/templates/ponytail.md` | coding rules from Ponytail (`DietrichGebert/ponytail`, commit `96608e0`) | MIT, source and copyright in the file header, full text in the licence file |
 | `boxbox/providers.json` | a trimmed snapshot of the public list from models.dev (`sst/models.dev`) | MIT |
 
 ## Third-party components inside the exe
@@ -25,21 +26,13 @@ The exe is a single-file package built with PyInstaller; it carries the followin
 | Python runtime and standard library | PSF-2.0 | runs agentboxbox |
 | pywebview, pythonnet, clr_loader, bottle, proxy_tools, cffi, pycparser, typing_extensions | BSD-3-Clause / MIT / PSF-2.0 | the embedded window |
 | Microsoft WebView2 SDK DLLs (shipped with pywebview) | BSD-3-Clause (Microsoft) | the embedded window; the WebView2 runtime itself is a Windows component and is not in the exe |
-| pystray | **LGPL-3.0** | the tray icon, see the next section |
-| Pillow, six | MIT-CMU / MIT | drawing the tray icon |
 | PyInstaller bootloader | GPL-2.0-or-later with the packaging exception | the shell of the exe. That exception explicitly allows distributing programs built with it under any licence |
 | Node.js | MIT (including the licences of its own components) | runs Pi |
 | Pi (`@earendil-works/pi-coding-agent`) and the npm dependencies it bundles | MIT, the dependencies include Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, 0BSD, Unlicense | the command line agent the worker cats use |
+| ripgrep (rg.exe) | Unlicense OR MIT | the bundled search tool the worker cats and Pi use to search file contents |
+| fd (fd.exe) | MIT OR Apache-2.0 | the bundled search tool for finding files by name |
 
-All of these licences allow redistribution as long as the copyright notice and the full licence text come with it — that is what THIRD_PARTY_LICENSES.txt is for, and the exe carries it too. We did not change the source of any of these components.
-
-### pystray and LGPL-3.0
-
-pystray is the only LGPL component. This is how we comply:
-
-- The exe carries the full text of LGPL-3.0 and GPL-3.0 (the pystray section of THIRD_PARTY_LICENSES.txt).
-- We did not modify pystray: we use the original from PyPI (the version is listed in THIRD_PARTY_LICENSES.txt), and its source is available both on <https://github.com/moses-palmer/pystray> and on PyPI.
-- The full source of agentboxbox and the build script (`packaging/build_exe.ps1`) are public. You can swap in a modified pystray and build the exe again, following the “Development” section of the README; that is the “recombine with a modified library” the LGPL asks for.
+All of these licences allow redistribution as long as the copyright notice and the full licence text come with it — that is what THIRD_PARTY_LICENSES.txt is for, and the exe carries it too. We did not change the source of any of these components. The tray icon and its menu are our own code (`boxbox/tray_win.py`, plain ctypes calls into Windows); there is no LGPL component in the exe.
 
 ## Things we do not bundle and you install yourself
 

@@ -10,13 +10,13 @@ ZH = {
     "stall.kids": "底下还在跑：{kids}",
     "stall.kid": "{name}（{cmd}，已跑 {age}）",
     "stall.kid_sep": "；",
-    "stall.no_kids": "底下没有别的进程",
+    "stall.no_kids": "底下没有别的程序在跑",
     "stall.report": "{head}。{recent}。{kids}",
     "stall.hard": "命令 {cmd} 跑了 {dur}没结束",
     "stall.cmd_unknown": "这条命令",
     "stall.dur_min": "{n} 分钟",
     "stall.dur_sec": "{n} 秒",
-    "ack.cancel_alive": "已撤掉，但这只猫的进程没停掉（进程号 {pid}）",
+    "ack.cancel_alive": "已撤掉，但这只猫还没停下来（编号 {pid}）",
 }
 
 EN = {
@@ -33,5 +33,5 @@ EN = {
     "stall.cmd_unknown": "this command",
     "stall.dur_min": "{n} min",
     "stall.dur_sec": "{n} s",
-    "ack.cancel_alive": "Cancelled, but this cat's process is still running (process {pid})",
+    "ack.cancel_alive": "Cancelled, but this cat has not stopped yet (id {pid})",
 }

@@ -1,14 +1,14 @@
 """v0.1 shell: tray icon + embedded dashboard window (工作计划 4.1 / 4.2, 架构设计 §17.1).
 
-This is the ONLY module that imports the two GUI dependencies (pystray, pywebview; Pillow comes with pystray).
 The core runs in-process on 127.0.0.1:<core_port>; everything else keeps working without this file.
+The tray itself is our own ctypes code (tray_win.py); pywebview is the only GUI dependency left.
 
     python -m boxbox tray            # start core + tray; window hidden until clicked
     python -m boxbox tray --show     # also show the window at startup
 
-Tray menu: 打开看板 · 在跑 N · 工位 ▸ · 上岗（Onboard）· 设置 · 自检 · 打开日志文件夹 · 开机启动 ☑ · 退出
-Icon: pixel box; red dot only when the core is unreachable（提醒不再让图标变红，提醒看办公室提示条）; "running" variant when something is in flight.
-Real pixel icons (0.6) can replace _draw_icon() later; keep the three states.
+Tray menu: 打开看板 · 在跑 N · 工位 ▸ · 上岗 · 设置 · 自检 · 打开日志文件夹 · 开机启动 ☑ · 退出
+Icon: assets/icon/boxbox*.ico; red dot only when the core is unreachable（提醒不再让图标变红，提醒看办公室提示条）;
+green dot while something is in flight. Not Windows: no tray, everything else still runs.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 
-from . import __version__, config, i18n
+from . import __version__, config, i18n, tray_win
 from .facades.http_const import LEADER_EVENT_KINDS
 from .store import Store
 
@@ -34,27 +34,11 @@ POLL_S = 5
 
 
 # ---------- icon ----------
-def _draw_icon(state: str, size: int = 64):
-    """Tray icon: assets/icon/icon-64.png (方案 A) with a state badge: 'normal' | 'red' (核心连不上) | 'running' (在跑).
-    Falls back to a code-drawn pixel box if the asset is missing."""
-    from PIL import Image, ImageDraw
-    src = config.BUNDLE / "assets" / "icon" / ("icon-%d.png" % size)
-    try:
-        img = Image.open(src).convert("RGBA")
-        if img.size != (size, size):
-            img = img.resize((size, size))
-    except Exception:  # noqa: BLE001 - asset missing: placeholder box
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        d0 = ImageDraw.Draw(img)
-        u0 = size // 16
-        d0.rectangle((2 * u0, 3 * u0, 14 * u0, 14 * u0), fill=(210, 160, 90, 255), outline=(90, 60, 30, 255), width=u0)
-    d = ImageDraw.Draw(img)
-    u = size // 16
-    if state == "red":        # 核心连不上
-        d.ellipse((10 * u, 0, 16 * u, 6 * u), fill=(220, 50, 50, 255), outline=(255, 255, 255, 255), width=u // 2 or 1)
-    elif state == "running":  # 有卡在跑
-        d.ellipse((10 * u, 0, 16 * u, 6 * u), fill=(70, 170, 100, 255), outline=(255, 255, 255, 255), width=u // 2 or 1)
-    return img
+def _icon_paths() -> dict[str, str]:
+    """托盘三态图标：正常 / 在跑（绿点）/ 核心连不上（红点），都是仓库里现成的 .ico，运行时 LoadImageW 直接载。"""
+    base = config.BUNDLE / "assets" / "icon"
+    return {"normal": str(base / "boxbox.ico"), "running": str(base / "boxbox-running.ico"),
+            "red": str(base / "boxbox-red.ico")}
 
 
 # ---------- core access ----------
@@ -108,12 +92,10 @@ def set_autostart(on: bool) -> None:
         except OSError:
             pass
         return
-    if getattr(sys, "frozen", False):                       # PyInstaller exe
-        cmd = '"%s" tray' % sys.executable
-    else:
-        cmd = '"%s" -m boxbox tray' % sys.executable
+    cmd = '"%s" tray' % sys.executable if getattr(sys, "frozen", False) else '"%s" -m boxbox tray' % sys.executable
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("@echo off\r\ncd /d \"%s\"\r\nstart \"\" /min %s\r\n" % (config.ROOT, cmd), encoding="utf-8")
+    # 第二行切 UTF-8：中文 Windows 的 cmd 默认按 GBK 读这个文件，exe 装在 D:\猫猫盒子\ 这样的目录下时路径会乱码，自启就起不来
+    f.write_text("@echo off\r\nchcp 65001 >nul\r\ncd /d \"%s\"\r\nstart \"\" /min %s\r\n" % (config.ROOT, cmd), encoding="utf-8", newline="")
 
 
 # ---------- shell ----------
@@ -316,6 +298,8 @@ class TrayNotifier:
         没有了或攒过合并窗口才弹。"""
         added = False
         try:
+            if self.store.last_event_id() < self.after:
+                self.after = 0        # 库被「重置所有」清过：事件号从头排，得从头再看一遍，不然交回不再弹通知
             for ev in self.store.events_after(self.after, LEADER_EVENT_KINDS + ("maybe_stuck",), limit=50):
                 self.after = max(self.after, int(ev.get("id") or 0))
                 it = _notify_item(self.store, ev)
@@ -439,26 +423,25 @@ class Shell:
 
     # ---- tray ----
     def _menu(self):
-        import pystray
+        """托盘菜单（每次右键现建）：项和文字照旧，只是换成了自己的 MenuItem。"""
         lg = i18n.lang()
         m = self.meta or {}
-        running = m.get("running", 0)
-        rows = [pystray.MenuItem("%s · %s%s" % (b.get("id"), b.get("word", "?"), (": " + b["title"]) if b.get("title") else ""),
-                                    None, enabled=False) for b in (self.board or [])]
-        stations = rows or [pystray.MenuItem(i18n.t("tray.menu.no_stations", lg), None, enabled=False)]
-        return pystray.Menu(
-            pystray.MenuItem(i18n.t("tray.menu.board", lg), lambda: self.open_board("/"), default=True),
-            pystray.MenuItem(i18n.t("tray.menu.running", lg, n=running), lambda: self.open_board("/"), enabled=False),
-            pystray.MenuItem(i18n.t("tray.menu.stations", lg), pystray.Menu(*stations)),
-            pystray.MenuItem(i18n.t("tray.menu.onboard", lg), lambda: self.open_board("/onboard")),
-            pystray.MenuItem(i18n.t("tray.menu.settings", lg), lambda: self.open_board("/settings")),
-            pystray.MenuItem(i18n.t("tray.menu.doctor", lg), lambda: self.open_board("/doctor")),
-            pystray.MenuItem(i18n.t("tray.menu.logs", lg), self._open_logs),
-            pystray.MenuItem(i18n.t("tray.menu.autostart", lg), self._toggle_autostart, checked=lambda item: autostart_enabled()),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(i18n.t("tray.menu.version", lg, v=__version__), None, enabled=False),
-            pystray.MenuItem(i18n.t("tray.menu.quit", lg), self._menu_quit),
-        )
+        rows = [tray_win.MenuItem("%s · %s%s" % (b.get("id"), b.get("word", "?"), (": " + b["title"]) if b.get("title") else ""),
+                                  None, enabled=False) for b in (self.board or [])]
+        stations = rows or [tray_win.MenuItem(i18n.t("tray.menu.no_stations", lg), None, enabled=False)]
+        return [
+            tray_win.MenuItem(i18n.t("tray.menu.board", lg), lambda: self.open_board("/")),
+            tray_win.MenuItem(i18n.t("tray.menu.running", lg, n=m.get("running", 0)), None, enabled=False),
+            tray_win.MenuItem(i18n.t("tray.menu.stations", lg), None, submenu=stations),
+            tray_win.MenuItem(i18n.t("tray.menu.onboard", lg), lambda: self.open_board("/#recruit")),
+            tray_win.MenuItem(i18n.t("tray.menu.settings", lg), lambda: self.open_board("/settings")),
+            tray_win.MenuItem(i18n.t("tray.menu.doctor", lg), lambda: self.open_board("/doctor")),
+            tray_win.MenuItem(i18n.t("tray.menu.logs", lg), self._open_logs),
+            tray_win.MenuItem(i18n.t("tray.menu.autostart", lg), self._toggle_autostart, checked=autostart_enabled()),
+            tray_win.SEP,
+            tray_win.MenuItem(i18n.t("tray.menu.version", lg, v=__version__), None, enabled=False),
+            tray_win.MenuItem(i18n.t("tray.menu.quit", lg), self._menu_quit),
+        ]
 
     def _open_logs(self):
         p = config.DATA / "logs"
@@ -472,7 +455,7 @@ class Shell:
         set_autostart(not autostart_enabled())
 
     def _poll(self):
-        """Refresh icon state + menu numbers from the core every POLL_S seconds."""
+        """Refresh icon state + tooltip from the core every POLL_S seconds."""
         while not self.stop_flag.is_set():
             meta = _get(self.port, "/api/meta") or {}
             board = (_get(self.port, "/api/stations") or {}).get("stations") or []
@@ -484,24 +467,27 @@ class Shell:
             if self.icon is not None:
                 try:
                     if state != self.state:
-                        self.icon.icon = _draw_icon(state)
+                        self.icon.set_state(state)
                         self.state = state
-                    self.icon.menu = self._menu()
-                    self.icon.title = title_text(meta)
+                    self.icon.set_tip(title_text(meta))
                 except Exception:  # noqa: BLE001
                     pass
             self.stop_flag.wait(POLL_S)
 
     def _run_tray(self):
-        import pystray
-        self.icon = pystray.Icon(APP_NAME, _draw_icon("normal"), display_name(), self._menu())
+        """托盘跑在自己的线程里，run() 阻塞到退出。非 Windows：不起托盘（打印一句），其余照常。"""
         threading.Thread(target=self._poll, name="boxbox-tray-poll", daemon=True).start()
+        if not IS_WIN:
+            sys.stderr.write(i18n.t("tray.stderr.no_tray", i18n.lang()) + "\n")
+            self.stop_flag.wait()                                  # 没有托盘也得占着这个线程，等退出
+            return
+        self.icon = tray_win.TrayIcon(menu_builder=self._menu, on_click=lambda: self.open_board("/"),
+                                      tip=title_text(self.meta), icons=_icon_paths())
         threading.Timer(3.0, _promote_tray_icon).start()  # Explorer writes the NotifyIconSettings entry once the icon is added
-        self.icon.run(setup=self._icon_ready)              # blocks this (non-main) thread until icon.stop()
+        self.icon.run(self._icon_ready)              # blocks this (non-main) thread until icon.stop()
 
-    def _icon_ready(self, icon):
-        """托盘图标进了系统托盘再开通知线程：图标还没建好时弹通知会失败，那条就白丢了。"""
-        icon.visible = True
+    def _icon_ready(self):
+        """托盘图标进了系统托盘再开通知线程：图标还没建好时弹气泡会失败，那条就白丢了。"""
         self.start_notifier()
 
     def start_notifier(self):
@@ -512,7 +498,7 @@ class Shell:
         self.notifier.start()
 
     def _menu_quit(self, *_):
-        """托盘菜单「退出」。确认框放到单独线程里弹：pystray 的消息循环不能卡在框里
+        """托盘菜单「退出」。确认框放到单独线程里弹：托盘的消息循环不能卡在框里
         （卡住时托盘不响应、框和托盘抢消息，点「否」点不动）。同一时间只弹一个。"""
         if not self._quit_lock.acquire(blocking=False):
             return                                        # 框已经开着：别再叠一个
@@ -545,6 +531,11 @@ class Shell:
                 self.on_quit()
             except Exception as e:  # noqa: BLE001
                 sys.stderr.write(i18n.t("tray.stderr.quit_err", i18n.lang(), err=e) + "\n")
+        # 核心收干净了再立兜底钟：接下来窗口 / 托盘的收尾万一卡住（destroy 在非 GUI 线程上叫过会卡），
+        # 8 秒后直接结束进程，exe 文件不能一直被占着；钟得立在卡点前面才有效
+        t = threading.Timer(8.0, os._exit, args=(0,))
+        t.daemon = True
+        t.start()
         try:
             if self.icon is not None:
                 self.icon.stop()
@@ -555,14 +546,10 @@ class Shell:
                 self.window.destroy()
         except Exception:  # noqa: BLE001
             pass
-        # 兜底：窗口 / 托盘线程万一卡住，8 秒后直接结束进程（核心上面已经收好了），exe 文件不能一直被占着
-        t = threading.Timer(8.0, os._exit, args=(0,))
-        t.daemon = True
-        t.start()
 
     # ---- main ----
     def run(self):
-        """pywebview owns the main thread (Windows requirement); pystray runs on a worker thread."""
+        """pywebview owns the main thread (Windows requirement); the tray runs on a worker thread."""
         tray = threading.Thread(target=self._run_tray, name="boxbox-tray", daemon=True)
         if self.core_stopped is not None:
             # 核心被 POST /api/shutdown 收了（冒烟测试 / 以后的「从页面退出」）：托盘和窗口跟着走同一条退出路

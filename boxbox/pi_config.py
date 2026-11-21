@@ -159,15 +159,6 @@ def api_probe(pi: dict, timeout_s: float = CONNECT_TIMEOUT_S, dns_timeout_s: flo
     return ProbeResult(False, int((time.monotonic() - t0) * 1000), stage, addr)
 
 
-def api_reachable(pi: dict, timeout_s: float = CONNECT_TIMEOUT_S) -> bool:
-    """api_probe 的布尔版（重试节奏原样保留：三次、隔 0.5 秒，任一次连上就算通）。"""
-    return api_probe(pi, timeout_s).ok
-
-
-#: api_reachable 的别名，老代码还按这个名字调
-intranet_reachable = api_reachable
-
-
 def build_models_json(stations: list[dict], catalog: list[dict] | None = None) -> dict:
     """client=="pi" 且 enabled 的工位每站一个 provider；校验不过的跳过，错误进 "_skipped"（不写文件）。
     地址和模型对得上 Pi 自带的那一条，接口类型、兼容开关、思考档位、能不能看图都照 Pi 的写（见 pi_catalog）；
@@ -219,14 +210,10 @@ def write_pi_dir(stations: list[dict], pi_dir: pathlib.Path | None = None) -> pa
     doc = build_models_json(stations)
     doc.pop("_skipped", None)
     target = d / "models.json"
-    tmp = target.with_suffix(".json.tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, target)
+    config._write_json(target, doc, indent=2)
     settings = d / "settings.json"
     if not settings.exists():
-        with open(settings, "w", encoding="utf-8") as f:
-            json.dump({"telemetry": False}, f, ensure_ascii=False, indent=2)
+        config._write_json(settings, {"telemetry": False}, indent=2)
     return d
 
 
@@ -239,6 +226,20 @@ def key_env_name(station_id: str) -> str:
 def key_available(station: dict) -> bool:
     """这个工位有没有密钥：只看 data/secrets.json 里存的那一份。"""
     return bool(config.get_secret(str((station or {}).get("id") or "")))
+
+
+def tools_bin() -> pathlib.Path | None:
+    """自带搜索工具的 bin 目录（rg / fd）：exe 模式在 BUNDLE/runtime/bin，源码模式在仓库 build/runtime/bin
+    （BOXBOX_RUNTIME 指一个同结构的目录也行）。猫开工和 Pi 的 grep / find 都靠它排在 PATH 开头。找不到 → None。"""
+    cands = []
+    if os.environ.get("BOXBOX_RUNTIME"):
+        cands.append(pathlib.Path(os.environ["BOXBOX_RUNTIME"]) / "bin")
+    cands.append(config.BUNDLE / ("runtime" if config.FROZEN else "build/runtime") / "bin")
+    exe = "rg.exe" if os.name == "nt" else "rg"
+    for d in cands:
+        if (d / exe).is_file():
+            return d
+    return None
 
 
 def pi_env(station: dict, base_env: dict | None = None) -> dict:
@@ -261,6 +262,17 @@ def pi_env(station: dict, base_env: dict | None = None) -> dict:
         env[name] = stored
     else:
         env.pop(name, None)
+    # 自带的 rg / fd（bin 目录）和自带 node 的目录排最前：用户电脑上没装开发工具，猫也能干活，
+    # Pi 的 grep / find 也在 PATH 上找到这份，不去 GitHub 临时下
+    head = []
+    tb = tools_bin()
+    if tb is not None:
+        head.append(str(tb))
+    rt = runtime()
+    if rt.get("source") == "bundled" and rt.get("node"):
+        head.append(str(pathlib.Path(rt["node"]).parent))
+    if head:
+        env["PATH"] = os.pathsep.join(head + ([env["PATH"]] if env.get("PATH") else []))
     return env
 
 
@@ -317,12 +329,15 @@ def runtime() -> dict:
     return {"node": node, "cli": cli, "source": "system" if node and cli else None, "pi_version": pi_ver, "node_version": None}
 
 
-def pi_cli_argv(station: dict, prompt: str, session_dir: pathlib.Path, continue_session: bool = False) -> list[str]:
+def pi_cli_argv(station: dict, prompt: str, session_dir: pathlib.Path, continue_session: bool = False,
+                 search_tools: bool = False) -> list[str]:
     """[node, cli.js, --mode json, --provider <名>, --model <id>, --session-dir <dir>, prompt]。没装 Pi 抛 FileNotFoundError。
     --no-skills / --no-prompt-templates：不加载用户本机 ~/.agents 里的 skills 和提示模板（隐私 + 省 token + 免干扰）；
     --no-context-files 不加：项目里的 AGENTS.md 对打工猫有用。
     continue_session=True：命令行加 --continue —— 接着这个 session 目录里上次那段对话往下做
-    （Pi 的 --continue = 接着这个目录里最近的一次会话）。"""
+    （Pi 的 --continue = 接着这个目录里最近的一次会话）。
+    search_tools=True：命令行加 --tools +grep,+ls —— 在默认工具（read/bash/edit/write）上多给搜内容和列目录两个工具。
+    值必须是「+名字」的追加写法：写成 grep,ls 会把默认那几个换掉（Pi 的 cli.md「Tools」）。"""
     rt = runtime()
     node, cli = rt["node"], rt["cli"]
     if not node or not cli:
@@ -334,5 +349,7 @@ def pi_cli_argv(station: dict, prompt: str, session_dir: pathlib.Path, continue_
             "--session-dir", str(session_dir)]
     if continue_session:
         argv.append("--continue")
+    if search_tools:
+        argv += ["--tools", "+grep,+ls"]
     argv.append(prompt)
     return argv

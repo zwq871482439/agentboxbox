@@ -146,6 +146,16 @@ def rmtree_safe(path, ignore_errors: bool = False) -> None:
             raise
 
 
+def _unlink_file(path: pathlib.Path) -> None:
+    """删一个文件。Windows 上 git clone / git init 出来的 .git 对象文件是只读的，
+    直接删会 PermissionError，清理就永远删不干净——先加写权限再删一次。"""
+    try:
+        path.unlink()
+    except PermissionError:
+        os.chmod(path, stat.S_IWRITE)
+        path.unlink()
+
+
 def _rm_entry(path: pathlib.Path, ignore_errors: bool) -> None:
     kind = _link_kind(path)
     if kind:
@@ -156,7 +166,7 @@ def _rm_entry(path: pathlib.Path, ignore_errors: bool) -> None:
             raise FileNotFoundError(path)
         return
     if not path.is_dir():
-        path.unlink()
+        _unlink_file(path)
         return
     with os.scandir(path) as it:
         names = [entry.name for entry in it]

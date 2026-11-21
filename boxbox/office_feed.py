@@ -238,7 +238,7 @@ def _state_of(row: dict, lvl1: dict, lvl2: dict) -> str:
         return "config"          # 配置有问题：状态词用看板那句，不当成闲着
     if str(row.get("word_code") or "") in ("running", "running_queue", "stuck"):
         return "run"
-    if row.get("rest"):        # 歇着：出去玩了，等的样子，不是出错
+    if row.get("rest"):        # 歇着：等的样子，不是出错
         return "rest"
     sid = str(row.get("id") or "")
     if sid in lvl1:
@@ -349,7 +349,7 @@ def build(meta: dict, board: list[dict], todo: dict, tokens: dict, stations_def:
         kinds = kinds_by_station.get(sid, [])
         state = _state_of(row, lvl1, lvl2)
         if state == "rest":
-            # 歇着：出去玩了，预计 01:54 回来（额度用完）
+            # 歇着：额度用完，预计 01:54 回来
             state_word = str(row.get("word") or "") or i18n.t("office.state.rest", lg)
         elif state in ("fail", "you", "arch") and kinds:
             # 卡住 / 待验收 / 打回待定 / 失败，是给人看的原话
@@ -374,13 +374,15 @@ def build(meta: dict, board: list[dict], todo: dict, tokens: dict, stations_def:
             "role": "lead" if lead else "member",
             "label": (i18n.t("office.leader_label", lg, sid=sid) if lead else sid),
             "name": _model_of(row, stations_def),
-            "cat_name": sid,   # 猫脚下画的名字 = 工位名（上岗时用户起的，比如「猫猫首领」）；name 是型号 / 客户端
+            "cat_name": str(row.get("label") or "") or sid,   # 猫脚下画的名字 = 显示名（没起就是工位名）；name 是型号 / 客户端
             "model": _model_of(row, stations_def),
             "channel": i18n.t("office.runner." + runner, lg) if runner in OFFICE_RUNNERS else "",
             "route": row.get("runner"),
             "accent": accent,
             "state": state,
             "state_word": state_word,
+            # 一句大白话状态：和看板那一行、给首领的看板文字同一句
+            "status_line": str(row.get("status_line") or ""),
             "state_sub": str(row.get("client") or ""),
             # 余量血条：调用方按额度账户填好的同一份结果，没查到就 off，画布不画
             **_quota_fields(mode_by_station.get(sid, "off"), quotas.get(sid), now, lg),
@@ -434,7 +436,6 @@ def build(meta: dict, board: list[dict], todo: dict, tokens: dict, stations_def:
         "leader_quiet": leader_quiet,
         "leader": meta.get("leader"),
         "channels": channels,
-        "background": [],             # v2 还没有后台通道
     }
     if events is not None:
         out["events"] = [e for e in events if isinstance(e, dict)]

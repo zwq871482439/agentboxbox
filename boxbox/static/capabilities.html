@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="doc.title">能力 · 猫猫盒子</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/pixelpage.css">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font:14px/1.55 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+a{color:#315f87}
+h1,h2,h3,p{margin:0}
+.wrap{max-width:960px;margin:22px auto;padding:0 18px 40px}
+.pagehead{margin-bottom:16px}
+.pagehead h1{font-size:22px}
+.pagehead .sub{margin-top:4px;color:#6d5948}
+.panel{margin-bottom:16px}
+.hd{display:flex;align-items:center;gap:12px}
+.hd h2{font-size:16px;font-weight:600;min-width:0}
+.switches{margin-left:auto;display:flex;gap:6px;flex:none}
+.btn{padding:3px 11px;cursor:pointer;font:inherit;white-space:nowrap}
+.btn:disabled{opacity:.55;cursor:default}
+.row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid #d7c7af}
+.row .label{color:#6d5948;font-weight:600}
+.row .value{min-width:0;overflow-wrap:anywhere}
+.source-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.source-line+.source-line{margin-top:4px}
+.err{color:#a32d20;margin-top:6px}
+.err:empty{display:none}
+.always-item{padding:7px 0}
+.always-item+.always-item{border-top:1px solid #d7c7af}
+.always-item h3{font-size:14px}
+.always-item p{color:#6d5948;margin-top:3px}
+@media (max-width:640px){.row{grid-template-columns:70px minmax(0,1fr);gap:8px}}
+</style>
+<script src="/static/i18n.js"></script>
+<script src="/static/i18n-capabilities.js"></script>
+<script src="/static/topbar.js" defer></script>
+</head>
+<body class="px-page">
+<header id="bx-top"></header>
+<main class="wrap">
+  <div class="pagehead">
+    <h1 data-i18n="cap.h1">能力</h1>
+    <p class="sub" data-i18n="cap.sub">帮手干活时用到的几样东西。默认就好，想试再开。</p>
+  </div>
+  <div id="caps"></div>
+</main>
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById("caps");
+  function t(key, vars) { return BXi18n.t(key, vars); }
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) { node.className = cls; }
+    if (text != null) { node.textContent = text; }
+    return node;
+  }
+  function row(panel, field, value) {
+    var line = el("div", "row");
+    line.dataset.field = field;
+    line.appendChild(el("span", "label", t("cap." + field)));
+    var content = el("div", "value");
+    if (value && value.nodeType) { content.appendChild(value); } else { content.textContent = value; }
+    line.appendChild(content);
+    panel.appendChild(line);
+  }
+  function stateName(value) {
+    return t(value === true ? "cap.on" : value === false ? "cap.off" : "cap." + value);
+  }
+  function measuredState(value) {
+    return t(value === true ? "cap.measuredOn" : value === false ? "cap.measuredOff" : "cap." + value);
+  }
+  function measuredText(cap) {
+    var measured = cap.measured || {};
+    var choices = cap.kind === "choice" ? cap.choices : [true, false];
+    if (!choices.some(function (v) { return measured[String(v)]; })) { return t("cap.unmeasured"); }
+    return choices.map(function (v) {
+      var item = measured[String(v)];
+      if (!item) { return measuredState(v) + "：" + t("cap.unmeasured"); }
+      var minutes = String(Math.round((item.work_s || 0) / 6) / 10);
+      return t("cap.measuredGroup", { state: measuredState(v), cards: item.cards, minutes: minutes });
+    }).join("；");
+  }
+  function sourceNode(cap) {
+    var box = el("div");
+    (cap.licenses || []).forEach(function (lic) {
+      var line = el("div", "source-line");
+      var parts = [t("cap.bundled"), lic.name, lic.version, lic.license].filter(function (v) { return v; });
+      line.appendChild(el("span", "", parts.join(" · ")));
+      var a = el("a", "", t("cap.license"));
+      a.href = "/legal/third-party";
+      line.appendChild(a);
+      box.appendChild(line);
+    });
+    if (cap.idea) {
+      var ideaLine = el("div", "source-line");
+      var name = cap.idea;
+      try { name = new URL(cap.idea).hostname.replace(/^www\./, ""); } catch (e) { }
+      var idea = el("a", "", t("cap.idea", { name: name }));
+      idea.href = cap.idea;
+      idea.target = "_blank";
+      idea.rel = "noopener noreferrer";
+      ideaLine.appendChild(idea);
+      box.appendChild(ideaLine);
+    }
+    if (!(cap.licenses || []).length && !cap.idea) { box.textContent = t("cap.bundled"); }
+    return box;
+  }
+  function change(cap, value, panel) {
+    var buttons = panel.querySelectorAll("button");
+    Array.prototype.forEach.call(buttons, function (b) { b.disabled = true; });
+    var body = {};
+    body[cap.setting] = value;
+    fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { if (!r.ok) { throw new Error("settings"); } return load(); })
+      .catch(function () {
+        if (!panel.isConnected) { return; }
+        Array.prototype.forEach.call(buttons, function (b) { b.disabled = false; });
+        panel.querySelector(".err").textContent = t("cap.failed");
+      });
+  }
+  function renderCap(cap) {
+    var panel = el("section", "panel capability");
+    panel.id = "cap-" + cap.id;
+    panel.dataset.cap = cap.id;
+    var hd = el("div", "hd");
+    hd.appendChild(el("h2", "", cap.name));
+    var switches = el("div", "switches");
+    var values = cap.kind === "choice" ? cap.choices : [true, false];
+    values.forEach(function (value) {
+      var b = el("button", "btn cap-toggle" + (cap.value === value ? " on" : ""), stateName(value));
+      b.type = "button";
+      b.dataset.value = String(value);
+      b.setAttribute("aria-pressed", cap.value === value ? "true" : "false");
+      b.onclick = function () { change(cap, value, panel); };
+      switches.appendChild(b);
+    });
+    hd.appendChild(switches);
+    panel.appendChild(hd);
+    row(panel, "what", cap.description);
+    row(panel, "applies", t(cap.applies === "code" ? "cap.code" : "cap.any"));
+    row(panel, "cost", cap.cost);
+    row(panel, "measured", measuredText(cap));
+    row(panel, "source", sourceNode(cap));
+    panel.appendChild(el("p", "err"));
+    root.appendChild(panel);
+  }
+  function renderAlways(items) {
+    var panel = el("section", "panel always");
+    var hd = el("div", "hd");
+    hd.appendChild(el("h2", "", t("cap.always")));
+    panel.appendChild(hd);
+    items.forEach(function (item) {
+      var rowItem = el("div", "always-item");
+      rowItem.appendChild(el("h3", "", item.name));
+      rowItem.appendChild(el("p", "", item.description));
+      panel.appendChild(rowItem);
+    });
+    root.appendChild(panel);
+  }
+  function load() {
+    return fetch("/api/capabilities", { cache: "no-store" }).then(function (r) {
+      if (!r.ok) { throw new Error("capabilities"); }
+      return r.json();
+    }).then(function (data) {
+      root.textContent = "";
+      data.caps.forEach(renderCap);
+      renderAlways(data.always);
+    }).catch(function () {
+      root.textContent = "";
+      root.appendChild(el("p", "err", t("cap.loadFailed")));
+    });
+  }
+  function init() {
+    load();
+    addEventListener("bx-lang-changed", load);
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); } else { init(); }
+})();
+</script>
+</body>
+</html>

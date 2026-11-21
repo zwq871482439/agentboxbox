@@ -48,15 +48,45 @@ def _now() -> str:
     return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
+def _git_roots() -> list[pathlib.Path]:
+    """git 可能被换过位置（scoop 被删、winget 重装），所以不只看盒子启动时的 PATH。"""
+    roots: list[pathlib.Path] = []
+    git = shutil.which("git")
+    if git:
+        p = pathlib.Path(git).resolve()
+        roots += [p.parent.parent, p.parent]
+    if not IS_WIN:
+        return roots
+    for var, tail in (("ProgramFiles", "Git"), ("ProgramFiles(x86)", "Git"),
+                       ("LOCALAPPDATA", "Programs/Git"), ("USERPROFILE", "scoop/apps/git/current")):
+        base = os.environ.get(var)
+        if base:
+            roots.append(pathlib.Path(base) / tail)
+    roots += _git_roots_registry()
+    return roots
+
+
+def _git_roots_registry() -> list[pathlib.Path]:
+    """注册表里 Git for Windows 自己记的安装位置（PATH 里没有时也能找到）。"""
+    try:
+        import winreg
+    except ImportError:
+        return []
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\GitForWindows") as key:
+            val, _ = winreg.QueryValueEx(key, "InstallPath")
+    except OSError:
+        return []
+    return [pathlib.Path(str(val))] if val else []
+
+
 def _git_bash_dir() -> str | None:
     """<git root>\\bin so Pi's bash tool lands in Git Bash, not System32\\bash.exe (WSL)."""
-    git = shutil.which("git")
-    if not git:
-        return None
-    root = pathlib.Path(git).resolve().parent.parent
-    for cand in (root / "bin", root / "usr" / "bin"):
-        if (cand / ("bash.exe" if IS_WIN else "bash")).exists():
-            return str(cand)
+    name = "bash.exe" if IS_WIN else "bash"
+    for root in _git_roots():
+        for cand in (root / "bin" / name, root / "usr" / "bin" / name, root / name):
+            if cand.exists():
+                return str(cand.parent)
     return None
 
 
@@ -75,6 +105,11 @@ class _Live:
         self.lock = threading.Lock()
         self.threads: list[threading.Thread] = []
         self.slim = runlog.Slimmer()          # 记录只记有用的：逐字片段和长命令的重复输出不进文件
+        self.job = None                       # 这一轮的 Job（Windows）：收尾时结束里面还活着的进程
+
+    def end_job(self):
+        job, self.job = self.job, None
+        procjob.end_job(job)
 
     def _pump_stdout(self):
         f = self.proc.stdout
@@ -141,6 +176,9 @@ class PiOnceRunner(Runner):
                                    errs=i18n.t("runner.list_sep", self.lang).join(errs))
         if not pi_config.key_available(self.cfg):
             return "auth", i18n.t("runner.no_key", self.lang, sid=self.station)
+        if IS_WIN and not _git_bash_dir():
+            # 猫的命令要在 Git Bash 里跑；找不到就把话说明白，别一张张卡不明不白地失败
+            return "route", i18n.t("runner.no_git_bash", self.lang, sid=self.station)
         host = pi_config.host_of(self.pi)
         if host and not classify.tcp_reachable(host):   # 统一在 dispatcher 开工前探（_network_wait），这里只留公网 443 的老预检
             return "unreachable", i18n.t("runner.host_unreachable", self.lang, host=host)
@@ -201,7 +239,8 @@ class PiOnceRunner(Runner):
         resume = str(card.get("resume_session") or "").strip()
         sess_dir = pathlib.Path(resume) if resume else (config.DATA / "sessions" / run_id)
         sess_dir.mkdir(parents=True, exist_ok=True)
-        argv = pi_config.pi_cli_argv(self.cfg, prompt, sess_dir, continue_session=bool(resume))
+        argv = pi_config.pi_cli_argv(self.cfg, prompt, sess_dir, continue_session=bool(resume),
+                                     search_tools=bool(card.get("search_tools")))
         env = pi_config.pi_env(self.cfg)
         tmp_dir = tmpdir.card_tmp(task_id)          # 临时文件放程序目录 tmp\ 里这张卡专用的子目录
         env.update(BOXBOX_TASK_ID=task_id, BOXBOX_RUN_ID=run_id, BOXBOX_STATION=self.station,
@@ -223,6 +262,7 @@ class PiOnceRunner(Runner):
                                 cwd=cwd, env=env, creationflags=flags, **procjob.popen_kwargs())
         procjob.assign(proc)                  # 核心退出 / 崩溃时这个进程跟着结束
         live = _Live(proc, log_path, lang=self.lang)
+        live.job = procjob.run_job(proc)      # 这一轮收尾时，它起过的进程一起收掉
         live.start_pumps()
         self.live[run_id] = live
         return RunHandle(run_id=run_id, task_id=task_id, station=self.station, pid=proc.pid, started_at=_now(),
@@ -285,6 +325,7 @@ class PiOnceRunner(Runner):
         except subprocess.TimeoutExpired:
             live.proc.kill()
             code = live.proc.wait(timeout=5)
+        live.end_job()                       # Pi 退了：它起的、还挂着的进程（测试窗口、后台脚本）一起收掉
         live.join()
         for f in (live.proc.stdout, live.proc.stderr):
             try:
@@ -346,6 +387,7 @@ class PiOnceRunner(Runner):
             return False
         if live.proc is not None:
             procjob.kill_tree(live.proc)
+            live.end_job()
             return live.proc.poll() is not None
         return procjob.kill_pid(live.pid)
 
@@ -354,6 +396,7 @@ class PiOnceRunner(Runner):
         live = self.live.pop(run_id, None)
         if live is None or live.proc is None:
             return
+        live.end_job()
         for f in (live.proc.stdout, live.proc.stderr):
             try:
                 if f:
@@ -367,6 +410,7 @@ class PiOnceRunner(Runner):
         ids = list(self.live)
         for rid in ids:
             procjob.kill_tree(self.live[rid].proc)
+            self.live[rid].end_job()
         return ids
 
 

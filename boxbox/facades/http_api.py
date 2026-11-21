@@ -5,7 +5,8 @@ import re
 import threading
 import urllib.parse
 
-from .. import __version__, config, connectors, efficiency, i18n, pi_catalog, pi_config, providers, quota, runlog, scenes, tmpdir, tokens
+from .. import __version__, capabilities, config, connectors, efficiency, i18n, pi_catalog, pi_config, providers, quota, runlog, scenes, tmpdir, tokens
+from .. import live as live_view
 from ..store import now_iso
 from .http_const import (
     COPY_DECOR,
@@ -26,6 +27,8 @@ def handle_get(h, u, q):
             if u.path == "/api/stations/detail":                # 工位详情（查看详情抽屉）：完整配置（不含 key）+ 连接 + 调度记录 + 余量
                 detail, code = _station_detail(d, (q.get("id") or [""])[0])
                 return h._json(detail, code)
+            if u.path == "/api/stations/live":
+                return h._json(live_view.follow(d, (q.get("id") or [""])[0]))
             if u.path == "/api/tasks":
                 return h._json({"tasks": [{k: t.get(k) for k in ("id", "title", "kind", "assignee", "state", "round", "dispatcher", "created_at", "updated_at")}
                                              | {"wait_reason": (t.get("card") or {}).get("wait_reason"),   # 排队原因（等这只猫腾出手 / 等接口）
@@ -40,12 +43,16 @@ def handle_get(h, u, q):
             if u.path == "/api/interrupted":                # 上次退出 / 崩溃时中断的卡（这批还没问过用户）
                 cards = d.interrupted_cards()
                 return h._json({"cards": cards, "count": len(cards)})
-            if u.path in ("/api/calls", "/api/timeline"):
+            if u.path == "/api/timeline":
                 return h._json({"runs": store.recent_runs(int((q.get("limit") or ["50"])[0])), "events": store.events(int((q.get("limit") or ["100"])[0]))})
             if u.path == "/api/tokens":
                 return h._json(tokens.summary(store, days=int((q.get("days") or ["7"])[0]), lang=i18n.lang()))
             if u.path == "/api/efficiency":
-                return h._json(efficiency.report(store, days=(q.get("days") or ["7"])[0]))
+                return h._json(efficiency.report(store, days=(q.get("days") or ["7"])[0],
+                                                 dispatcher=(q.get("dispatcher") or [""])[0] or None,
+                                                 goal=(q.get("goal") or [""])[0] or None))
+            if u.path == "/api/capabilities":
+                return h._json(capabilities.report(store, i18n.lang()))
             if u.path == "/api/providers":                  # 服务商清单（models.dev 快照）；lite=1 只要元信息
                 if (q.get("lite") or ["0"])[0] in ("1", "true"):
                     return h._json(providers.meta())
@@ -106,9 +113,16 @@ def handle_get(h, u, q):
                 if client not in connectors.load() or not sid:
                     return h._json({"ok": False, "code": "bad_args", "text": i18n.t("api.need_client_station", i18n.lang())}, 400)
                 entry = connectors.load()[client]
-                return h._json({"ok": True, "client": client, "snippet": connectors.snippet(client, sid, core_url),
-                                   "format": entry.get("format"), "config_path": entry.get("config_path"),
-                                   "mcp_menu_hint": connectors.hint_text(client, "menu", i18n.lang())})
+                out = {"ok": True, "client": client, "snippet": connectors.snippet(client, sid, core_url),
+                       "format": entry.get("format"), "config_path": entry.get("config_path"),
+                       "mcp_menu_hint": connectors.hint_text(client, "menu", i18n.lang())}
+                # 安装命令 / 一键链接：connectors.json 里写了这家才给，其余客户端照旧只有片段
+                for key, val in (("install_cmd", connectors.setup_cmd(client, sid, core_url)),
+                                 ("install_link", connectors.setup_link(client, sid, core_url)),
+                                 ("dispatch_link", connectors.dispatch_link(client))):
+                    if val:
+                        out[key] = val
+                return h._json(out)
             m = re.match(r"^/api/summon/(.+)$", u.path)
             if m:
                 st = config.station(urllib.parse.unquote(m.group(1)))
@@ -238,13 +252,14 @@ def handle_post(h, u, body):
                 ids = [c["task_id"] for c in d.interrupted_cards()]
             return h._json(d.dismiss_interrupted(ids, to_leader=bool(body.get("to_leader"))))
         if u.path == "/api/settings":
-            s = config.settings()
-            patch, errs = settings_patch(body, s, i18n.lang())
-            if errs:
-                return h._json({"ok": False, "code": "settings_invalid",
-                                "text": i18n.t("api.settings_invalid", i18n.lang(), errs="; ".join(errs)), "errors": errs}, 400)
-            s.update(patch)
-            config.save_settings(s)
+            with config._WRITE_LOCK:   # 上岗页会同时发存设置和存上岗进度：读改写三步要原子，不然丢一边
+                s = config.settings()
+                patch, errs = settings_patch(body, s, i18n.lang())
+                if errs:
+                    return h._json({"ok": False, "code": "settings_invalid",
+                                    "text": i18n.t("api.settings_invalid", i18n.lang(), errs="; ".join(errs)), "errors": errs}, 400)
+                s.update(patch)
+                config.save_settings(s)
             return h._json(s)
         if u.path == "/api/stations_def":
             items = body.get("stations")
@@ -268,38 +283,41 @@ def handle_post(h, u, body):
             if isinstance(st.get("pi"), dict):
                 # 密钥只从 data/secrets.json 来、地址只认 base_url：这两个老字段存下来只会误导
                 st["pi"] = {k: v for k, v in st["pi"].items() if k not in ("api_key_env", "host")}
-            cur = config.stations()
-            items = [s for s in cur if s.get("id") != st["id"]]
-            old = next((s for s in cur if s.get("id") == st["id"]), None)     # 已有的猫不挪位置
-            # 放回原来的位置：主首领是列表里第一个首领，改个样子不能把它挪到后面、让别的首领顶上来
-            at = next((i for i, s in enumerate(cur) if s.get("id") == st["id"]), None)
-            st = pi_catalog.keep_compat(old, st)          # 只改名字 / 样子：之前自动打开的兼容开关留着
-            if st.get("role") == "leader":
-                # 名字撞上打工猫就拒掉，不能把猫改成首领（接活方式对不上）
-                if old is not None and old.get("role") != "leader":
-                    return h._json({"ok": False, "code": "name_taken",
-                                    "text": i18n.t("api.err_name_taken", i18n.lang(), sid=st.get("id"))}, 400)
-                primary = config.leader_id()
-                if old is None and not add_leader and primary and primary != st["id"]:
-                    # 上岗时给首领换了名字：换掉主首领，不是再多一个（多一个首领只走「再加一个首领」）
-                    at = next(i for i, s in enumerate(items) if s.get("id") == primary)
-                    items.pop(at)
-                    config.set_secret(primary, None)
-                    h.core.d.runners.pop(primary, None)
-                st["slot"] = config.LEADER_SLOT
-            elif old is not None:
-                st["slot"] = old.get("slot")
-            else:                                              # 新猫：A→F 里第一个空位
-                given = str(st.get("slot") or "")
-                slot = given if given in config.SLOTS else config.next_slot(items)
-                if slot is None:
-                    return h._json({"ok": False, "code": "slots_full", "text": i18n.t("api.slots_full", i18n.lang())}, 400)
-                st["slot"] = slot
-            if at is None:
-                items.append(st)
-            else:
-                items.insert(at, st)
-            config.save_stations(items)
+            with config._WRITE_LOCK:   # 读改写工位要原子：和同时来的改名 / 兼容开关自愈不互相覆盖
+                cur = config.stations()
+                items = [s for s in cur if s.get("id") != st["id"]]
+                old = next((s for s in cur if s.get("id") == st["id"]), None)     # 已有的猫不挪位置
+                # 放回原来的位置：主首领是列表里第一个首领，改个样子不能把它挪到后面、让别的首领顶上来
+                at = next((i for i, s in enumerate(cur) if s.get("id") == st["id"]), None)
+                st = pi_catalog.keep_compat(old, st)          # 只改名字 / 样子：之前自动打开的兼容开关留着
+                if old is not None and "label" not in st and old.get("label"):
+                    st["label"] = old["label"]   # 改配置的表单不带显示名：改过的名字留着
+                if st.get("role") == "leader":
+                    # 名字撞上打工猫就拒掉，不能把猫改成首领（接活方式对不上）
+                    if old is not None and old.get("role") != "leader":
+                        return h._json({"ok": False, "code": "name_taken",
+                                        "text": i18n.t("api.err_name_taken", i18n.lang(), sid=st.get("id"))}, 400)
+                    primary = config.leader_id()
+                    if old is None and not add_leader and primary and primary != st["id"]:
+                        # 上岗时给首领换了名字：换掉主首领，不是再多一个（多一个首领只走「再加一个首领」）
+                        at = next(i for i, s in enumerate(items) if s.get("id") == primary)
+                        items.pop(at)
+                        config.set_secret(primary, None)
+                        h.core.d.runners.pop(primary, None)
+                    st["slot"] = config.LEADER_SLOT
+                elif old is not None:
+                    st["slot"] = old.get("slot")
+                else:                                              # 新猫：A→F 里第一个空位
+                    given = str(st.get("slot") or "")
+                    slot = given if given in config.SLOTS else config.next_slot(items)
+                    if slot is None:
+                        return h._json({"ok": False, "code": "slots_full", "text": i18n.t("api.slots_full", i18n.lang())}, 400)
+                    st["slot"] = slot
+                if at is None:
+                    items.append(st)
+                else:
+                    items.insert(at, st)
+                config.save_stations(items)
             # 重新打开一只猫：清掉它的歇着状态，排队的卡接着干
             if old is not None and not old.get("enabled", True) and st.get("enabled", True):
                 h.core.d.clear_resting(st["id"])
@@ -309,6 +327,32 @@ def handle_post(h, u, body):
                 h.core.d.release_config_bad(st["id"])
             h.core.d.drop_idle_runners()   # 丢掉没在跑进程的运行器：在跑的卡不能误伤
             return h._json({"ok": True, "station": st, "stations": config.stations()})
+        if u.path == "/api/stations/label":   # 改显示名：id 不变，手上的卡、额度、密钥、连接地址都不动
+            lg = i18n.lang()
+            sid = str(body.get("id") or "")
+            if config.station(sid) is None:
+                return h._json({"ok": False, "code": "station_unknown",
+                                "text": i18n.t("api.station_unknown", lg, sid=sid)}, 404)
+            label = str(body.get("label") or "").strip()
+            if len(label) > config.LABEL_MAX:
+                return h._json({"ok": False, "code": "label_too_long",
+                                "text": i18n.t("api.err_label_len", lg, n=config.LABEL_MAX)}, 400)
+            with config._WRITE_LOCK:
+                if label and any(s.get("id") != sid
+                                 and label in (str(s.get("id") or ""), str(s.get("label") or "").strip())
+                                 for s in config.stations()):
+                    return h._json({"ok": False, "code": "label_taken",
+                                    "text": i18n.t("api.err_label_taken", lg, label=label)}, 400)
+                items = config.stations()
+                for s in items:
+                    if s.get("id") != sid:
+                        continue
+                    if label:
+                        s["label"] = label
+                    else:
+                        s.pop("label", None)   # 空字符串 = 清掉，显示回 id
+                config.save_stations(items)
+            return h._json({"ok": True, "id": sid, "label": label})
         if u.path == "/api/stations/copy":                     # 复制一只打工猫（工牌上的「复制」）
             sid = str(body.get("id") or "")
             src = config.station(sid)
@@ -429,20 +473,6 @@ def handle_post(h, u, body):
             elif not r.get("needs_confirm"):
                 h.core.d.store.event("providers_refresh", i18n.t("api.providers_failed", i18n.lang(), text=r.get("text", "")))
             return h._json(r)
-        if u.path == "/api/connectors/install":
-            client = str(body.get("client") or "")
-            sid = str(body.get("station") or "")
-            core_url = "http://127.0.0.1:%d" % h.server.server_port
-            if client not in connectors.load() or not sid:
-                return h._json({"ok": False, "code": "bad_args", "text": i18n.t("api.need_client_station", i18n.lang())}, 400)
-            try:
-                st = connectors.install(client, sid, core_url, project_dir=config.project_dir(), lang=i18n.lang())
-            except ValueError as e:                        # GUI client: no file to write -> hand back the snippet
-                return h._json({"ok": False, "code": "snippet_only", "text": str(e),
-                                   "snippet": connectors.snippet(client, sid, core_url)})
-            h.core.d.store.event("connector", i18n.t("api.connector_written", i18n.lang(),
-                                                      sid=sid, client=client, path=st.get("path")), sid)
-            return h._json(dict(ok=True, **st))
         return h._json({"error": "not found"}, 404)
     except Exception as e:  # noqa: BLE001
         return h._json({"ok": False, "code": "error", "text": str(e)}, 500)

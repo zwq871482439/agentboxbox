@@ -77,6 +77,55 @@ def assign(proc: subprocess.Popen) -> bool:
         return False
 
 
+def run_job(proc: subprocess.Popen):
+    """给这一轮单开一个 Job，把 Pi 放进去（先 assign 进核心的大 Job，这个就嵌在它下面）。
+    这一轮收尾时 end_job：这一轮起过的进程一起结束，包括 Pi 退了以后还挂着的（跑测试起的窗口、后台脚本）。
+    taskkill /T 找不到这些：父进程没了，它们就不在树上了。非 Windows、建不了、放不进去 → None，只靠核心退出时那个大 Job。"""
+    if not IS_WIN or proc is None:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        job = _create_job()
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+        if k32.AssignProcessToJobObject(job, int(proc._handle)):  # noqa: SLF001 - Popen 的进程句柄
+            return job
+        _close(job)
+    except Exception:  # noqa: BLE001 - 放不进去不能把派活搞挂
+        pass
+    return None
+
+
+def end_job(job) -> None:
+    """结束这一轮 Job 里还活着的所有进程，关掉句柄。job 是 None 就什么都不做。"""
+    if not job:
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
+        k32.TerminateJobObject(job, 1)
+    except Exception:  # noqa: BLE001
+        pass
+    _close(job)
+
+
+def _close(handle) -> None:
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        k32.CloseHandle(handle)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def popen_kwargs() -> dict:
     """POSIX 上让子进程自成一个进程组，kill_tree 才能连孙进程一起结束。"""
     return {} if IS_WIN else {"start_new_session": True}

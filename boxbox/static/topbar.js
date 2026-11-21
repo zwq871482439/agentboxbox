@@ -1,6 +1,6 @@
 /* 各页共用的顶栏（各页宽度、内容保持一致）。
    用法：页面里放 <header id="bx-top"></header>，再 <script src="/static/topbar.js"></script>。
-   - 导航只有 看板 / 工位 / 设置（自检收在设置页里）；当前页高亮。
+   - 导航只有 任务 / 帮手 / 能力 / 设置（自检收在设置页里）；当前页高亮。
    - 右侧两个核心指标：工作中（在跑的卡）/ 成功率（近 7 天收尾的卡里完成的占比），
      再加一个核心小圆点：绿 = 核心在跑，红 = 连不上。点圆点 = 连接状态（首页开面板，其它页去设置页的自检）。
    - 顶栏不数决策数、没有横幅；提醒统一读 /api/meta 的 alerts，在办公室顶部提示条里看。
@@ -12,35 +12,37 @@
   var HOME = location.pathname === "/";
   var TOP_ZH = {
     brand: "猫猫盒子",
-    navBoard: "看板",
-    navStations: "工位",
+    navBoard: "任务",
+    navStations: "帮手",
+    navCapabilities: "能力",
     navSettings: "设置",
     working: "工作中",
     success: "成功率",
     selfcheck: "自检",
     backOffice: "← 办公室",
-    workingTitle: "正在干活的任务卡",
-    successTitle: "近 7 天真跑完的任务卡里，完成的占多少（完成 ÷ 完成 + 真跑挂的；没开工 / 中断 / 撤掉的不算）",
+    workingTitle: "正在干活的任务",
+    successTitle: "近 7 天真跑完的任务里，完成的占多少（完成 ÷ 完成 + 真跑挂的；没开工 / 中断 / 撤掉的不算）",
     selfcheckTitle: "自检：看看盒子哪里不对",
     down: "猫猫盒子没在跑：双击猫猫盒子的 exe（agentboxbox_版本号.exe） 或运行 python -m boxbox serve",
-    doneTitle: "近 7 天收尾的任务卡：完成 {d} 张，失败 {f} 张",
+    doneTitle: "近 7 天收尾的任务：完成 {d} 个，失败 {f} 个",
     brandTitle: "agentboxbox",
     alive: "猫猫盒子在跑 · 版本 {v}（更新于 {t}）。点开看自检",
   };
   var TOP_EN = {
     brand: "agentboxbox",
-    navBoard: "Board",
-    navStations: "Stations",
+    navBoard: "Tasks",
+    navStations: "Helpers",
+    navCapabilities: "Capabilities",
     navSettings: "Settings",
     working: "Working",
     success: "Success",
     selfcheck: "Check",
     backOffice: "← Office",
-    workingTitle: "Cards being worked on",
-    successTitle: "Share of finished cards in the last 7 days (done ÷ done + really failed; not started, interrupted and cancelled do not count)",
+    workingTitle: "Tasks being worked on",
+    successTitle: "Share of finished tasks in the last 7 days (done ÷ done + really failed; not started, interrupted and cancelled do not count)",
     selfcheckTitle: "Check whether the box is fine",
     down: "agentboxbox is not running: double-click the exe (agentboxbox_version.exe) or run python -m boxbox serve",
-    doneTitle: "Cards finished in the last 7 days: {d} done, {f} failed",
+    doneTitle: "Tasks finished in the last 7 days: {d} done, {f} failed",
     brandTitle: "agentboxbox",
     alive: "agentboxbox is running · version {v} (updated {t}). Click to see the health check",
   };
@@ -78,7 +80,8 @@
 
   var path = location.pathname;
   var cur = path === "/board" ? "board"
-    : (path === "/stations" || path === "/onboard") ? "stations"
+    : path === "/stations" ? "stations"
+    : path === "/capabilities" ? "capabilities"
     : (path === "/settings" || path === "/doctor") ? "settings" : "";
   var top = document.getElementById("bx-top");
   if (!top) { top = document.createElement("header"); top.id = "bx-top"; document.body.insertBefore(top, document.body.firstChild); }
@@ -95,6 +98,7 @@
       '<nav class="bx-nav">' +
       '<a href="/board"' + (cur === "board" ? ' class="cur"' : "") + '>' + t.navBoard + '</a>' +
       '<a href="/stations"' + (cur === "stations" ? ' class="cur"' : "") + '>' + t.navStations + '</a>' +
+      '<a href="/capabilities"' + (cur === "capabilities" ? ' class="cur"' : "") + '>' + t.navCapabilities + '</a>' +
       '<a href="/settings"' + (cur === "settings" ? ' class="cur"' : "") + '>' + t.navSettings + '</a></nav>' +
       '<div class="bx-end">' +
       '<span class="bx-k" id="bx-k-run" title="' + t.workingTitle + '">' + t.working + "<b>–</b></span>" +
@@ -149,6 +153,7 @@
   }
 
   function tick() {
+    if (document.hidden) return;   /* 后台标签页不查，回前台后下一拍补上（首页的提醒也听这里） */
     get("/api/meta").then(function (meta) {
       render(meta);
       window.dispatchEvent(new CustomEvent("bx-top", { detail: { alive: !!meta, meta: meta } }));

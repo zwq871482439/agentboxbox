@@ -4,30 +4,9 @@
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
 
   var $ = function (s, r) { return (r || document).querySelector(s); };
-  var esc = function (s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  };
-  var num = function (n) {
-    if (n == null) return "—";
-    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  };
-  function hm(iso) {
-    if (!iso) return "—";
-    var d = new Date(iso);
-    if (isNaN(d)) return String(iso).slice(11, 16) || "—";
-    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
-  }
-  function when(iso) {
-    if (!iso) return "—";
-    var d = new Date(iso);
-    if (isNaN(d)) return String(iso).replace("T", " ").slice(0, 16);
-    var t = new Date();
-    var same = d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
-    var md = ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
-    return (same ? "" : md + " ") + hm(iso);
-  }
+  /* 共用工具在 util.js 里：esc / hm / when / api / copy / clientLabel 都只有那一份 */
+  var U = window.BXu;
+  var esc = U.esc, hm = U.hm, when = U.when, fmtNum = U.fmtNum, api = U.api;
 
   /* 状态词表在 i18n-board.js 里（bd.state.*），这里只留样式 */
   var STATE_CLS = {
@@ -47,17 +26,9 @@
     return stateWord(s);
   }
   /* 客户端、运行器、类别、退出码：界面只显示人话，代码名不出现在页面上 */
-  var CLIENT_LABEL = {
-    cursor: "Cursor", "claude-code": "Claude Code", codex: "Codex",
-    "kimi-code": "Kimi Code", "minimax-code": "MiniMax Code", "grok-bot": "Grok Bot",
-    workbuddy: "WorkBuddy", zcode: "ZCode"
-  };
+  /* 客户端显示名：名字表在 util.js，这里只传本页的词 */
   function clientLabel(c) {
-    if (!c) { return T("bd.client.none"); }
-    if (c === "pi") { return T("bd.client.pi"); }
-    if (c === "other") { return T("bd.client.other"); }
-    if (c === "other-direct") { return T("bd.client.otherDirect"); }
-    return CLIENT_LABEL[c] || String(c);
+    return U.clientLabel(c, { none: T("bd.client.none"), other: T("bd.client.other"), otherDirect: T("bd.client.otherDirect") });
   }
   function runnerLabel(r) { if (!r) return "-"; return T("bd.runner." + r); }
   function kindLabel(k) { if (!k) return "-"; return T("bd.kind." + k); }
@@ -102,34 +73,6 @@
   var detail = null;       /* {kind:'task'|'station', id, data} */
   var busy = false;
 
-  function api(path, opt) {
-    return fetch(path, opt).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (d) {
-        return { ok: r.ok, data: d, status: r.status };
-      });
-    }).catch(function (e) {
-      return { ok: false, error: String(e) };
-    });
-  }
-  function copy(text, btn) {
-    var done = function () {
-      var old = btn.textContent;
-      btn.textContent = T("bd.copy.done");
-      setTimeout(function () { btn.textContent = old; }, 1500);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, function () { fallback(); });
-    } else { fallback(); }
-    function fallback() {
-      var ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed"; ta.style.opacity = "0";
-      document.body.appendChild(ta); ta.select();
-      try { document.execCommand("copy"); done(); } catch (e) { btn.textContent = T("bd.copy.fail"); }
-      document.body.removeChild(ta);
-    }
-  }
-
   /* ---------- 工位 ---------- */
   function renderStations() {
     var box = $("#stations");
@@ -148,12 +91,12 @@
       /* 首领那行的客户端 = 真正连上来的那一家；还没连上就别点名某一家 */
       var cl = (s.role === "leader" && !s.client) ? T("bd.st.yourApp") : clientLabel(s.client);
       var line = (s.role === "leader" ? esc(cl) + " · " : "") + esc(runnerLabel(s.runner)) + " · " +
-        esc(T("bd.st.todo", { n: num(s.open) })) + mins;
+        esc(T("bd.st.todo", { n: fmtNum(s.open) })) + mins;
       if (s.runner === "scheduled") line += " · " + esc(schedAgo(s.last_scheduled_at));
       return '<div class="st' + wc + (s.enabled ? "" : " off") + '" data-id="' + esc(s.id) + '">' +
         '<div class="r1"><span class="id">' + esc(s.id) + "</span>" +
         '<span class="role">' + esc(roleWord(s.role)) + "</span>" +
-        '<span class="word">' + esc(s.word || "-") + "</span></div>" +
+        '<span class="word">' + esc(s.status_line || s.word || "-") + "</span></div>" +
         '<div class="r2">' + line + "</div>" + task + "</div>";
     }).join("");
     Array.prototype.forEach.call(box.querySelectorAll(".st"), function (el) {
@@ -186,12 +129,13 @@
         '<div class="r2"><span class="ttl">' + esc(it.title || T("bd.todo.noTitle")) + "</span>" +
         (acts ? '<span class="acts">' + acts + "</span>" : "") + "</div>" +   /* 按钮和标题同一行，标题让位，每条待办不变高 */
         (it.reason ? '<div class="why">' + esc(it.reason) + "</div>" : "") +
-        '<div class="okmsg" id="msg-' + esc(it.task_id) + '"></div></li>';
+        '<div class="okmsg" data-msg="' + esc(it.task_id) + '"></div></li>';
     }).join("");
     Array.prototype.forEach.call(box.querySelectorAll("[data-tid]"), function (el) {
       el.onclick = function () { openTask(el.dataset.tid); };
     });
     wireDecide(box);
+    items.forEach(function (it) { showMsg(it.task_id); });
   }
 
   /* 拍板按钮：按卡的状态给。待办本来等首领处理，首领不在时用户也能自己定（核心记成「你」拍的板） */
@@ -206,6 +150,14 @@
         esc(T("bd.act." + a)) + "</button>";
     }).join("");
   }
+  /* 拍板结果记在这里：原来只写进页面上那一个格子，下一次刷新就被冲掉了 */
+  var msgs = {};
+  function showMsg(taskId) {
+    var text = msgs[taskId] || "";
+    Array.prototype.forEach.call(document.querySelectorAll('[data-msg="' + taskId + '"]'), function (el) {
+      el.textContent = text;
+    });
+  }
   function decide(taskId, act, note) {
     if (busy) return;
     if (act === "cancel" && !window.confirm(T("bd.act.cancelConfirm"))) return;
@@ -218,9 +170,9 @@
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: act, note: note || "" })
     }).then(function (r) {
-      var msg = $("#msg-" + taskId);
       var text = (r.data && (r.data.text || r.data.error)) || (r.ok ? T("bd.todo.submitted") : T("bd.todo.failed"));
-      if (msg) { msg.textContent = text; }
+      msgs[taskId] = text;
+      showMsg(taskId);
       poll();
     }).then(function () { busy = false; }, function () { busy = false; });
   }
@@ -315,9 +267,9 @@
     var box = $("#tokBody");
     if (!d) { box.innerHTML = '<div class="empty">' + esc(T("bd.tok.loading")) + "</div>"; return; }
     var rows = (d.stations || []).map(function (r) {
-      return "<tr><td>" + esc(r.station) + '</td><td class="num">' + num(r.runs) + "</td>" +
-        '<td class="num">' + num(r.tok_in) + '</td><td class="num">' + num(r.tok_out) + "</td>" +
-        '<td class="num">' + num(r.tok_cr) + '</td><td class="num">' + num(r.tok_cw) + "</td>" +
+      return "<tr><td>" + esc(r.station) + '</td><td class="num">' + fmtNum(r.runs) + "</td>" +
+        '<td class="num">' + fmtNum(r.tok_in) + '</td><td class="num">' + fmtNum(r.tok_out) + "</td>" +
+        '<td class="num">' + fmtNum(r.tok_cr) + '</td><td class="num">' + fmtNum(r.tok_cw) + "</td>" +
         '<td class="num">' + (r.cost == null ? T("bd.tok.noPrice") : r.cost) + "</td>" +
         '<td class="num">' + esc(costEst(r.cost_est)) + "</td><td>" + quotaCell(r.quota) + "</td></tr>";
     });
@@ -337,6 +289,20 @@
   }
   function renderEff() {
     if (window.BXEff) { window.BXEff.render(S.eff); }
+  }
+
+  /* 「花了多少」：标题行一句话总数（次数 + 有单价才给钱），两张表收在下面 */
+  function renderCostSummary() {
+    var d = S.tokens;
+    var runs = 0, cost = null;
+    ((d && d.stations) || []).forEach(function (r) {
+      runs += Number(r.runs) || 0;
+      if (r.cost_est != null) { cost = (cost || 0) + Number(r.cost_est); }
+    });
+    var bits = [T("bd.cost.runs", { n: fmtNum(runs) })];
+    if (cost != null) { bits.push(T("bd.cost.approx", { c: cost.toFixed(2) })); }
+    var el = $("#costSum");
+    if (el) { el.textContent = T("bd.cost.title") + " · " + bits.join(" · "); }
   }
 
 
@@ -388,8 +354,8 @@
   function tokCell(s) {
     var j = parseTok(s);
     if (!j) { return T("bd.task.notCounted"); }
-    return T("bd.tok.h.in") + " " + num(j.in) + " " + T("bd.tok.h.out") + " " + num(j.out) + " " +
-      T("bd.tok.h.cr") + " " + num(j.cr) + " " + T("bd.tok.h.cw") + " " + num(j.cw) + " " + num(j.turns) + " turns";
+    return T("bd.tok.h.in") + " " + fmtNum(j.in) + " " + T("bd.tok.h.out") + " " + fmtNum(j.out) + " " +
+      T("bd.tok.h.cr") + " " + fmtNum(j.cr) + " " + T("bd.tok.h.cw") + " " + fmtNum(j.cw) + " " + fmtNum(j.turns) + " turns";
   }
   function gatesHtml(md) {
     var lines = String(md || "").split("\n").filter(function (l) { return l.trim(); });
@@ -413,6 +379,7 @@
     Array.prototype.forEach.call(remember, function (d) { openKeys[d.dataset.k] = d.open; });
     box.innerHTML = head(detail.id, detail.kind === "task" ? T("bd.drawer.task") : T("bd.drawer.station")) + body;
     wire(box);
+    if (detail.kind === "task") showMsg(detail.id);
   }
   function stationHtml(d) {
     if (!d || d.error) {
@@ -431,7 +398,7 @@
     kv.push([T("bd.station.kv.how"), esc(runnerLabel(d.runner))]);
     kv.push(
       [T("bd.station.kv.state"), esc(st.word || "-") + (st.minutes != null ? T("bd.st.minutes", { n: st.minutes }) : "")],
-      [T("bd.station.kv.todo"), num(st.open)],
+      [T("bd.station.kv.todo"), fmtNum(st.open)],
       [T("bd.station.kv.lastSeen"), esc(when(st.last_seen))],
       [T("bd.station.kv.where"), esc(d.where || "—")]
     );
@@ -452,7 +419,8 @@
       ? "<ol style='margin:0;padding-left:20px;font-size:13px'>" + d.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>"
       : '<div class="empty">' + esc(T("bd.station.noSteps")) + "</div>";
     var taskLink = st.task_id
-      ? '<div class="btnrow"><button class="btn" id="stTask">' + esc(T("bd.station.openTask", { id: st.task_id })) + "</button></div>"
+      ? '<div class="btnrow"><button class="btn" id="stTask" data-tid="' + esc(st.task_id) + '">' +
+        esc(T("bd.station.openTask", { id: st.task_id })) + "</button></div>"
       : "";
     var html = '<div class="dsec"><h3>' + esc(T("bd.station.baseTitle")) + '</h3><div class="kv">' +
       kv.map(function (p) {
@@ -467,7 +435,7 @@
     }
     return html;
   }
-  function everyMinText(v) { return v == null || v === "" ? "—" : T("bd.station.everyMinText", { n: num(v) }); }
+  function everyMinText(v) { return v == null || v === "" ? "—" : T("bd.station.everyMinText", { n: fmtNum(v) }); }
   /* /api/summon 还没给 every_min 时，回工位定义里查 runner_args.every_min（只查一次） */
   function loadEveryMin(sid, d) {
     var cur = (S.stationDefs || []).filter(function (x) { return x.id === sid; })[0];
@@ -504,14 +472,116 @@
         wire($("#drawer"));
       });
   }
+  /* 抽屉顶上三行：结果 / 下一步 / 用时 */
+  var DONE_STATES = { delivered: 1, reviewing: 1, accepted: 1, done: 1 };
+  function gatesCount(md) {
+    var ok = 0, n = 0;
+    String(md || "").split("\n").forEach(function (l) {
+      var m = /^\s*-\s*\[([ xX])\]/.exec(l);
+      if (m) { n++; if (m[1] !== " ") { ok++; } }
+    });
+    return { ok: ok, n: n };
+  }
+  function spanSec(a, b) {
+    if (!a) { return 0; }
+    var t1 = new Date(a).getTime();
+    if (isNaN(t1)) { return 0; }
+    var t2 = b ? new Date(b).getTime() : Date.now();
+    if (isNaN(t2)) { t2 = Date.now(); }
+    return Math.max(0, Math.round((t2 - t1) / 1000));
+  }
+  function durText(sec) {
+    var s = Math.max(0, Math.round(Number(sec) || 0));
+    if (s < 60) { return T("bd.eff.sec", { n: s }); }
+    var m = Math.floor(s / 60);
+    if (m < 60) { return T("bd.eff.min", { n: m }); }
+    return T("bd.eff.hour", { n: Math.floor(m / 60), m: m % 60 });
+  }
+  function resultText(t) {
+    var s = t.state;
+    if (DONE_STATES[s]) {
+      var g = gatesCount(t.review_md);
+      return T("bd.task.resultDone") + (g.n ? "，" + T("bd.task.gatesSum", { ok: g.ok, n: g.n }) : "");
+    }
+    if (s === "running" || s === "dispatched") { return T("bd.task.resultWorking"); }
+    if (s === "queued") { return T("bd.task.resultQueued"); }
+    return T("bd.task.resultFailed");
+  }
+  function nextText(t) {
+    var s = t.state;
+    var acc = (t.card || {}).acceptance || {};
+    if (s === "reviewing" || s === "delivered") {
+      return acc.review === "user" ? T("bd.task.nextUser") : T("bd.task.nextLeader");
+    }
+    if (s === "running" || s === "dispatched") { return T("bd.task.nextWorking"); }
+    if (s === "queued") { return T("bd.task.nextQueued"); }
+    if (s === "failed" || s === "returned" || s === "blocked" || s === "interrupted") { return T("bd.task.nextFailed"); }
+    return T("bd.task.nextNone");
+  }
+  function timeText(t) {
+    var work = 0;
+    (t.runs || []).forEach(function (r) { work += spanSec(r.started, r.ended); });
+    var total = durText(spanSec(t.created_at, t.done_at || t.delivered_at || null));
+    return work > 0 ? T("bd.task.timeText", { t: total, w: durText(work) }) : T("bd.task.timeNone", { t: total });
+  }
+  function threeRows(t) {
+    return '<div class="rows">' +
+      "<div><b>" + esc(T("bd.task.result")) + "</b>　" + esc(resultText(t)) + "</div>" +
+      "<div><b>" + esc(T("bd.task.next")) + "</b>　" + esc(nextText(t)) + "</div>" +
+      "<div><b>" + esc(T("bd.task.time")) + "</b>　" + esc(timeText(t)) + "</div></div>";
+  }
+  /* 时间线：一项一行 —— 时分 + 名称 + 谁 */
+  function timelineHtml(nodes) {
+    var list = nodes || [];
+    if (!list.length) { return '<div class="empty">' + esc(T("bd.task.noTimeline")) + "</div>"; }
+    return '<ul class="tl">' + list.map(function (n) {
+      return "<li><span class='t'>" + esc(hm(n.at)) + "</span><span class='n'>" + esc(n.label || "") +
+        "</span><span class='w'>" + esc(n.who || "") + "</span></li>";
+    }).join("") + "</ul>";
+  }
+  /* 交付单：markdown 里的一点点排版（- 开头是条目，### 是小标题） */
+  function mdBody(text) {
+    var out = [], ul = false;
+    String(text || "").split("\n").forEach(function (l) {
+      var s = l.trim();
+      if (!s) { if (ul) { out.push("</ul>"); ul = false; } return; }
+      if (/^###\s+/.test(s)) {
+        if (ul) { out.push("</ul>"); ul = false; }
+        out.push('<div class="dl-h">' + esc(s.replace(/^###\s+/, "")) + "</div>");
+        return;
+      }
+      if (/^-\s+/.test(s)) {
+        if (!ul) { out.push("<ul>"); ul = true; }
+        out.push("<li>" + esc(s.replace(/^-\s+/, "")) + "</li>");
+        return;
+      }
+      if (ul) { out.push("</ul>"); ul = false; }
+      out.push("<p>" + esc(s) + "</p>");
+    });
+    if (ul) { out.push("</ul>"); }
+    return out.join("");
+  }
+  /* 交付单：## 拆成四小块 */
+  function deliveryHtml(md) {
+    var text = String(md || "").trim();
+    if (!text) { return '<div class="empty">' + esc(T("bd.task.noDelivery")) + "</div>"; }
+    var chunks = text.split(/^##[ \t]+/m);
+    chunks.shift();
+    return '<div class="dl">' + chunks.map(function (c) {
+      var i = c.indexOf("\n");
+      var h = (i < 0 ? c : c.slice(0, i)).trim();
+      var b = (i < 0 ? "" : c.slice(i + 1)).trim();
+      return '<div class="dl-b"><div class="dl-t">' + esc(h) + "</div>" + mdBody(b) + "</div>";
+    }).join("") + "</div>";
+  }
   function taskHtml(t) {
     var card = t.card || {};
     var acc = card.acceptance || {};
     var toks = t.tokens || {};
     var tokSum = (toks.tok_in == null && toks.tok_out == null)
       ? T("bd.task.notCounted")
-      : T("bd.tok.h.in") + " " + num(toks.tok_in) + " " + T("bd.tok.h.out") + " " + num(toks.tok_out) + " " +
-        T("bd.tok.h.cr") + " " + num(toks.tok_cr) + " " + T("bd.tok.h.cw") + " " + num(toks.tok_cw) + " " +
+      : T("bd.tok.h.in") + " " + fmtNum(toks.tok_in) + " " + T("bd.tok.h.out") + " " + fmtNum(toks.tok_out) + " " +
+        T("bd.tok.h.cr") + " " + fmtNum(toks.tok_cr) + " " + T("bd.tok.h.cw") + " " + fmtNum(toks.tok_cw) + " " +
         (toks.cost == null ? T("bd.tok.noPrice") : toks.cost);
     var kv = [
       [T("bd.task.kv.id"), esc(t.id)],
@@ -546,15 +616,19 @@
 
     var acts = decideBtns(t.id, t.state), reviewBox = "";
     if (acts) {
-      reviewBox = '<div class="btnrow"><input class="note" id="rvNote" placeholder="' + esc(T("bd.task.note")) + '">' + acts + "</div>" +
-        '<div class="okmsg" id="msg-' + esc(t.id) + '"></div>' +
+      reviewBox = '<div class="btnrow"><input class="note" id="rvNote" type="text" placeholder="' + esc(T("bd.task.note")) + '">' + acts + "</div>" +
+        '<div class="okmsg" data-msg="' + esc(t.id) + '"></div>' +
         '<p class="hint">' + esc(T(acc.review === "user" && t.state === "reviewing" ? "bd.task.decideYou" : "bd.task.decideLeader")) + "</p>";
     }
 
-    return '<div class="dsec"><h3>' + T("bd.task.baseTitle") + '</h3><div class="kv">' +
+    /* 高级：基本信息、任务原文、运行、自动检查、回报、事件都收在这里（默认收起） */
+    var advKey = t.id + "-adv";
+    var adv = '<details class="dsec adv" data-k="' + esc(advKey) + '"' + (openKeys[advKey] ? " open" : "") + ">" +
+      "<summary>" + esc(T("bd.task.advanced")) + "</summary>" +
+      '<div class="dsec"><h3>' + esc(T("bd.task.baseTitle")) + '</h3><div class="kv">' +
       kv.map(function (p) { return '<div class="k">' + p[0] + '</div><div class="v">' + p[1] + "</div>"; }).join("") +
-      "</div>" + reviewBox +
-      fold(t.id + "-card", T("bd.task.cardJson"), "<pre>" + esc(JSON.stringify(card, null, 2)) + "</pre>") + "</div>" +
+      "</div></div>" +
+      fold(t.id + "-card", T("bd.task.cardJson"), "<pre>" + esc(JSON.stringify(card, null, 2)) + "</pre>") +
       '<div class="dsec"><h3>' + esc(T("bd.task.runs", { n: (t.runs || []).length })) + "</h3><div class='scroll'><table class='tbl'>" +
       "<thead><tr><th>" + esc(T("bd.task.runHead")) + "</th><th>" + esc(T("bd.task.runFrom")) + "</th><th>" +
       esc(T("bd.task.runResult")) + "</th><th>" + esc(T("bd.task.runStatus")) + "</th><th>" +
@@ -564,22 +638,29 @@
       '<div class="dsec"><h3>' + esc(T("bd.task.report")) + "</h3>" +
       (t.report ? "<pre>" + esc(t.report) + "</pre>" : '<div class="empty">' + esc(T("bd.task.noReport")) + "</div>") + "</div>" +
       '<div class="dsec"><h3>' + esc(T("bd.task.events", { n: Math.min((t.events || []).length, 50) })) + "</h3>" +
-      ('<ul class="ev">' + (evs || '<li class="empty">' + esc(T("bd.task.noEvents")) + "</li>") + "</ul>") + "</div>";
+      ('<ul class="ev">' + (evs || '<li class="empty">' + esc(T("bd.task.noEvents")) + "</li>") + "</ul>") + "</div>" +
+      "</details>";
+
+    return '<div class="dsec">' + threeRows(t) + reviewBox + "</div>" +
+      '<div class="dsec"><h3>' + esc(T("bd.task.timeline")) + "</h3>" + timelineHtml(t.timeline) + "</div>" +
+      '<div class="dsec"><h3>' + esc(T("bd.task.delivery")) + "</h3>" + deliveryHtml(t.delivery) + "</div>" +
+      adv;
   }
   function wire(root) {
     var close = $("#dclose", root);
     if (close) close.onclick = closeDrawer;
     var cp = $("#cpPrompt", root);
-    if (cp) cp.onclick = function () { copy(detail.data.prompt, this); };
+    if (cp) cp.onclick = function () { U.copy(detail.data.prompt, this, T("bd.copy.done"), T("bd.copy.fail")); };
     var cm = $("#cpMcp", root);
-    if (cm) cm.onclick = function () { copy(detail.data.snippet, this); };
+    if (cm) cm.onclick = function () { U.copy(detail.data.snippet, this, T("bd.copy.done"), T("bd.copy.fail")); };
     var st = $("#stTask", root);
-    if (st) st.onclick = function () { openTask(detail.data.station || detail.id); };
+    if (st) st.onclick = function () { openTask(st.getAttribute("data-tid") || detail.data.station || detail.id); };
     wireDecide(root);
   }
 
   /* ---------- 轮询 ---------- */
   function poll() {
+    if (document.hidden) return Promise.resolve();
     return Promise.all([
       api("/api/meta"), api("/api/stations"), api("/api/todo"), api("/api/tasks?limit=1000")
     ]).then(function (rs) {
@@ -602,15 +683,21 @@
     });
   }
   function pollHeavy() {
+    if (document.hidden) return Promise.resolve();
     var jobs = [];
-    if ($("#tokBox").open) jobs.push(api("/api/tokens?days=7").then(function (r) { if (r.ok) { S.tokens = r.data; renderTokens(); } }));
-    if ($("#effBox") && $("#effBox").open) {
+    /* 用量一直要拿：标题行那句总数靠它。效率只在展开时读 */
+    jobs.push(api("/api/tokens?days=7").then(function (r) {
+      if (r.ok) { S.tokens = r.data; renderCostSummary(); if ($("#costBox").open) { renderTokens(); } }
+    }));
+    if ($("#costBox").open) {
       jobs.push(api("/api/efficiency?days=7").then(function (r) { if (r.ok) { S.eff = r.data; renderEff(); } }));
     }
     return Promise.all(jobs);
   }
-  $("#tokBox").addEventListener("toggle", function () { if ($("#tokBox").open) { renderTokens(); pollHeavy(); } });
-  if ($("#effBox")) { $("#effBox").addEventListener("toggle", function () { if ($("#effBox").open) { renderEff(); pollHeavy(); } }); }
+  $("#costBox").addEventListener("toggle", function () {
+    if (!$("#costBox").open) { return; }
+    renderTokens(); renderEff(); pollHeavy();
+  });
   addEventListener("bx-summon", function (e) { e.preventDefault(); openStation(e.detail); });
   $("#tkDays").onchange = function () { tkPage = 0; tkSyncRange(); renderTasks(); };
   $("#tkFrom").onchange = function () { tkPage = 0; renderTasks(); };
@@ -638,7 +725,8 @@
 
   /* 换语言：整页重画一遍 */
   addEventListener("bx-lang-changed", function () {
-    renderStations(); renderTodo(); renderTasks(); renderTokens(); renderEff();
+    renderStations(); renderTodo(); renderTasks(); renderCostSummary();
+    if ($("#costBox").open) { renderTokens(); renderEff(); }
     if (detail) { drawDrawer(); }
   });
 

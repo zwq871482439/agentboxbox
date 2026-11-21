@@ -46,6 +46,7 @@ pre.diag{background:var(--code);padding:10px;border-radius:6px;white-space:pre-w
 </style>
 <script src="/static/i18n.js"></script>
 <script src="/static/i18n-doctor.js"></script>
+<script src="/static/util.js"></script>
 <script src="/static/topbar.js" defer></script>
 </head>
 <body>
@@ -64,18 +65,15 @@ pre.diag{background:var(--code);padding:10px;border-radius:6px;white-space:pre-w
     <div class="foot" id="stamp" data-i18n="dr.checking">正在检查…</div>
   </div>
   <div class="panel" id="list"><div class="empty" data-i18n="dr.checking">正在检查…</div></div>
-  <details class="panel" id="diagBox"><summary data-i18n="dr.diagTitle">诊断信息（纯文本，已脱敏）</summary><pre class="diag" id="diag"></pre></details>
-  <div class="foot" data-i18n="dr.foot">不过的项先看「怎么办」，改完点「重新检查」。</div>
+  <details class="panel" id="diagBox"><summary data-i18n="dr.diagTitle">诊断信息</summary><pre class="diag" id="diag"></pre></details>
+  <div class="foot" data-i18n="dr.foot">不过的项先看「怎么办」，改完点「重新检查」。诊断信息里没有密钥。</div>
 </div>
 <script>
 (function () {
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
   function $(s) { return document.querySelector(s); }
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
-    });
-  }
+  /* 共用工具在 util.js 里 */
+  var esc = window.BXu.esc;
   function tagWord(ok) { return ok === true ? T("dr.ok") : (ok === false ? T("dr.fail") : T("dr.skip")); }
   function render(d) {
     var s = d.summary || {};

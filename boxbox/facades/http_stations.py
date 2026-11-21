@@ -60,6 +60,12 @@ def _summon(station: dict, core_url: str, lang: str = "zh") -> dict:
     out["steps"] = [i18n.t("api.summon.manual.step1", lang),
                     i18n.t("api.summon.manual.step2", lang),
                     i18n.t("api.summon.manual.step3", lang)]
+    # 装进编程助手（和上岗第 1 步同一套）：装一次，以后哪个对话都不用再贴上面那段话。
+    # 上岗走完以后只有这里给得出来；0.5 升上来、当初是贴话连上的，靠它装
+    if client in connectors.load():
+        out["client_label"] = hint.get("label") or client
+        out["install_link"] = connectors.setup_link(client, sid, core_url)
+        out["install_cmd"] = connectors.setup_cmd(client, sid, core_url)
     return out
 def _station_errors(st: dict) -> list[str]:
     lg = i18n.lang()
@@ -130,7 +136,7 @@ def _running_cards(d, sid: str) -> list[dict]:
 def _git(cwd: str, args: list[str]) -> tuple[int, str]:
     """git 用参数列表调，不走 shell。返回 (退出码, 输出)。"""
     p = subprocess.run(["git", "-C", str(cwd)] + args, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=120, shell=False)
+                       encoding="utf-8", errors="replace", timeout=120, shell=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
 def _is_git_repo(cwd: str) -> bool:
     try:

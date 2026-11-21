@@ -85,10 +85,7 @@ def add(station: str, text: str, task_id: str = "", store=None, lang: str | None
         its.pop(0)
         dropped += 1
     p = _path(station)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(its, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    config._write_json(p, its)
     if store is not None:
         store.event("feedback", i18n.t("ev.feedback", sid=station)
                     + (i18n.t("ev.feedback.dropped", n=dropped) if dropped else ""),

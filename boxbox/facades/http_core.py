@@ -4,9 +4,9 @@ from __future__ import annotations
 import datetime as _dt
 import re
 
-from .. import __version__, config, i18n, leader_sessions, stall, tasks, tmpdir
+from .. import __version__, config, delivery, i18n, leader_sessions, stall, tasks, tmpdir
 from ..store import now_iso
-from .http_const import _HHMM, ROLE_ALIASES, RUNNING_STATES, SETTINGS_BOOLS, SETTINGS_INTS, TOOLS
+from .http_const import _HHMM, ROLE_ALIASES, RUNNING_STATES, SETTINGS_BOOLS, SETTINGS_CHOICES, SETTINGS_INTS, TOOLS
 from .http_leader import _cancelled, _leader_new, _wait_for_update, drop_held, finish_delivery
 
 
@@ -15,6 +15,18 @@ class Core:
 
     def __init__(self, dispatcher):
         self.d = dispatcher
+
+    def note_connected(self, station: str) -> None:
+        """这个工位第一次连上来：记 first_seen + 发一条事件（任何角色都记，只记一次）。
+        两条路都算：客户端启用盒子时自己发的 MCP initialize（Cursor 点了「安装」就连，不用在对话里说话），
+        和按那段话走 HTTP 兜底时的第一次 get_briefing。"""
+        d = self.d
+        if not station or config.station(station) is None:
+            return
+        if (d.store.station_states().get(station) or {}).get("first_seen"):
+            return
+        d.store.station_touch(station, first_seen=now_iso())
+        d.store.event("handshake_ok", i18n.t("ev.handshake_ok", d.lang_of(station), sid=station), station)
 
     def call(self, tool: str, station: str, args: dict, transport: str = "", session: str = "") -> dict:
         d = self.d
@@ -36,11 +48,8 @@ class Core:
             if str(session or "").strip():
                 leader_sessions.note(d, station, str(session).strip())
         if tool == "get_briefing":
-            # 第一次握手：这个工位从没来过 → 记 first_seen + 发事件；任何角色都记。
             # 先记再出简报：简报里附的看板才会把它自己写成「在岗」而不是「没连上」
-            if not ((d.store.station_states().get(station) or {}).get("first_seen")):
-                d.store.station_touch(station, first_seen=now_iso())
-                d.store.event("handshake_ok", i18n.t("ev.handshake_ok", lg, sid=station), station)
+            self.note_connected(station)
             out = d.briefing(station)
         elif tool == "get_board":
             out = {"ok": True, "board": d.board()}
@@ -152,6 +161,11 @@ def settings_patch(body: dict, cur: dict, lang: str | None = None) -> tuple[dict
                 errs.append(i18n.t("api.set_bool", lang, key=k))
             else:
                 out[k] = v
+        elif k in SETTINGS_CHOICES:
+            if v not in SETTINGS_CHOICES[k]:
+                errs.append("%s: %s" % (k, " / ".join(SETTINGS_CHOICES[k])))
+            else:
+                out[k] = v
         elif k == "office_theme_times":
             if not isinstance(v, dict) or any(t not in ("dawn", "day", "dusk", "night") for t in v):
                 errs.append(i18n.t("api.set_theme_keys", lang))
@@ -190,6 +204,9 @@ def _task_view(store, t: dict, d=None) -> dict:
     v["runs"] = [{k: r.get(k) for k in stall.RUN_VIEW_KEYS} for r in store.runs_for_task(t["id"])]
     v["tokens"] = store.tokens_for_task(t["id"])
     v["report"] = tasks.read_report(t["id"])
+    lg = d.lang() if d is not None else i18n.lang()
+    v["timeline"] = delivery.timeline(store, t["id"], lg)
+    v["delivery"] = delivery.sheet(store, t["id"], lg)
     try:
         v["review_md"] = (tasks.card_dir(t["id"]) / "review.md").read_text(encoding="utf-8")
     except OSError:
@@ -214,20 +231,20 @@ def _onboard_state(d) -> dict:
             "leader_link": link}           # mcp = 客户端里 MCP 连上了；http = 走的那段话里的兜底（MCP 没连上）
 def _meta(d) -> dict:
     store = d.store
-    open_tasks = store.list_tasks(state=",".join(tasks.OPEN_STATES))
-    running = [t for t in open_tasks if t["state"] in ("dispatched", "running")]
-    today = now_iso()[:10]
-    done_today = [t for t in store.list_tasks(state="done", limit=500) if (t.get("done_at") or "").startswith(today)]
+    # 顶栏 / 办公室每 5 秒要一遍这些数：全部 COUNT 出来，不把任务读出来（任务多了会跟着变慢）
+    open_n = store.count_tasks(tasks.OPEN_STATES)
+    running_n = store.count_tasks(("dispatched", "running"))
+    done_today = store.count_tasks("done", since_col="done_at", since=now_iso()[:10])
     # 顶栏「成功率」：近 7 天收尾的卡里，完成 ÷（完成 + 真跑挂了）；没有收尾的卡就是 None（页面显示「—」）
     # 算真跑完的：没开工（failed 且 runs 表里没有运行记录）不算失败；中断 / 撤掉的本来就不在 done,failed 里
     since = (_dt.datetime.now() - _dt.timedelta(days=7)).isoformat(timespec="seconds")
-    closed = [t for t in store.list_tasks(state="done,failed", limit=1000) if (t.get("updated_at") or "") >= since]
-    counted = [t for t in closed if t["state"] == "done" or store.runs_for_task(t["id"])]
-    ok_n = sum(1 for t in counted if t["state"] == "done")
+    ok_n = store.count_tasks("done", since_col="updated_at", since=since)
+    bad_n = store.count_tasks("failed", since_col="updated_at", since=since, with_runs=True)
+    counted = ok_n + bad_n
     from .. import alerts
-    return {"version": 2, "now": now_iso(), "running": len(running), "open": len(open_tasks), "done_today": len(done_today),
-            "success_7d": {"done": ok_n, "failed": len(counted) - ok_n,
-                           "rate": round(ok_n / len(counted), 3) if counted else None},
+    return {"version": 2, "now": now_iso(), "running": running_n, "open": open_n, "done_today": done_today,
+            "success_7d": {"done": ok_n, "failed": bad_n,
+                           "rate": round(ok_n / counted, 3) if counted else None},
             "alerts": alerts.compute(d),   # 全站提醒唯一出口：页面 / 托盘 / 办公室只读这里
             "badge": store.kv_get("badge") or {}, "leader": config.leader_id(),
             "leader_last_seen": d.leader_last_seen, "data": str(config.DATA), "app_version": __version__}

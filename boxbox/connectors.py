@@ -1,17 +1,17 @@
-"""客户端连接器：把 boxbox 的 MCP 服务条目写进各 agent 客户端的配置文件。
+"""客户端连接器：告诉各 agent 客户端怎么连上 boxbox。
 
 0.3 起所有客户端（connectors.json 里 transport=http）的条目都只写
 `http://127.0.0.1:<端口>/mcp?station=<工位>`，客户端直接连核心，不起子进程、不占 exe 文件。
-stdio_entry()（spawn `boxbox mcp --station <工位id> --core <核心URL>` 子进程）只留给 transport 不是 http 的条目，
-现在表里已经没有了。本模块只负责三件事（§17.2「登记」）：
-写条目（install）、查条目（status）、给手动粘贴片段（snippet）。
+
+盒子不替用户改 AI 软件的配置：写配置文件这条路（install）已经删掉，
+上岗改成用户自己复制条目。本模块现在只做两件事（§17.2「登记」）：
+查条目（status）、给手动粘贴片段（snippet）。
 
 仅标准库。不打印、不联网；只有 cursor_boxbox_disabled() 读 APPDATA 找 Cursor 的设置库（只读）。
 """
 
+import base64
 import json
-import re
-import sys
 import tomllib
 import urllib.parse
 from pathlib import Path
@@ -57,23 +57,9 @@ def mcp_url(station: str, core_url: str) -> str:
 
 
 def server_entry(station: str, core_url: str, client: str | None = None) -> dict:
-    """这家客户端的 boxbox 条目：transport=http 的只写 url（+ http_entry 里的额外键），其余走下面的 stdio 写法。"""
-    conf = load().get(client) if client else None
-    if conf and conf.get("transport") == "http":
-        return dict(conf.get("http_entry") or {}, url=mcp_url(station, core_url))
-    return stdio_entry(station, core_url)
-
-
-def stdio_entry(station: str, core_url: str) -> dict:
-    """一条 mcpServers 条目：command 用当前解释器绝对路径；PYTHONPATH 指向包所在目录，客户端不管从哪个 cwd 拉起都能 import。
-    打包成 exe 后（PyInstaller），command 就是 exe 本身，args 去掉 -m boxbox。"""
-    if getattr(sys, "frozen", False):
-        return {"command": sys.executable, "args": ["mcp", "--station", station, "--core", core_url]}
-    return {
-        "command": sys.executable,
-        "args": ["-m", "boxbox", "mcp", "--station", station, "--core", core_url],
-        "env": {"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
-    }
+    """这家客户端的 boxbox 条目：只写网址（+ http_entry 里的额外键），客户端直接连核心。"""
+    conf = (load().get(client) or {}) if client else {}
+    return dict(conf.get("http_entry") or {}, url=mcp_url(station, core_url))
 
 
 def resolve_path(client: str, project_dir: str | None, home: str | None = None) -> Path | None:
@@ -147,72 +133,7 @@ def status(client: str, project_dir: str | None = None, home: str | None = None)
 
 def _toml_section(entry: dict) -> str:
     """生成 [mcp_servers.boxbox] 段文本。json.dumps(ensure_ascii=False) 的输出是合法 TOML 基本字符串。"""
-    if entry.get("url"):
-        return "[mcp_servers.boxbox]\n" + f"url = {json.dumps(entry['url'], ensure_ascii=False)}\n"
-    args = ", ".join(json.dumps(a, ensure_ascii=False) for a in entry["args"])
-    return (
-        "[mcp_servers.boxbox]\n"
-        f"command = {json.dumps(entry['command'], ensure_ascii=False)}\n"
-        f"args = [{args}]\n"
-    )
-
-
-def _install_toml(path: Path, entry: dict) -> None:
-    """无段则末尾追加，有段则整段替换（段范围 = 段头到下一个 `[` 行之前）。"""
-    section = _toml_section(entry)
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    m = re.search(r"(?m)^\[mcp_servers\.boxbox\][ \t]*$", text)
-    if m:
-        nxt = re.compile(r"(?m)^\[").search(text, m.end())
-        new = text[: m.start()] + section + (text[nxt.start():] if nxt else "")
-    else:
-        sep = "" if not text or text.endswith("\n") else "\n"
-        head = "" if not text else ("\n" if text.endswith("\n\n") else "\n")
-        new = text + sep + head + section
-    if new != text:
-        _backup(path)
-        path.write_text(new, encoding="utf-8")
-
-
-def _install_json(path: Path, entry: dict) -> None:
-    """保留文件里其他键和其他 mcpServers 条目，只覆盖 boxbox 这一条。"""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    except ValueError:
-        data = {}
-    if not isinstance(data, dict):
-        data = {}
-    servers = data.setdefault("mcpServers", {})
-    if servers.get("boxbox") == entry:
-        return  # 幂等：条目已一致，不动文件（也不动备份）
-    servers["boxbox"] = entry
-    _backup(path)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _backup(path: Path) -> None:
-    if path.exists():
-        Path(str(path) + ".bak-boxbox").write_bytes(path.read_bytes())
-
-
-def install(client: str, station: str, core_url: str,
-            project_dir: str | None = None, home: str | None = None, lang: str | None = None) -> dict:
-    """把 boxbox 条目写进该客户端配置文件（幂等；写前备份为 <path>.bak-boxbox）。
-
-    返回写后的 status()。GUI 客户端（config_path 为 null）没有文件可写，抛 ValueError，
-    请改用 snippet() 给用户手动粘贴。
-    """
-    entry = load()[client]
-    path = resolve_path(client, project_dir, home)
-    if path is None:
-        raise ValueError(i18n.t("api.connector_no_path", lang, client=client))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    new_entry = server_entry(station, core_url, client)
-    if entry["format"] == "toml":
-        _install_toml(path, new_entry)
-    else:
-        _install_json(path, new_entry)
-    return status(client, project_dir, home)
+    return "[mcp_servers.boxbox]\n" + f"url = {json.dumps(entry['url'], ensure_ascii=False)}\n"
 
 
 def snippet(client: str, station: str, core_url: str) -> str:
@@ -225,6 +146,31 @@ def snippet(client: str, station: str, core_url: str) -> str:
         ensure_ascii=False,
         indent=2,
     )
+
+
+def setup_cmd(client: str, station: str, core_url: str) -> str:
+    """这家客户端的一条安装命令（claude-code / codex 有）：connectors.json 里的 {url} 换成连接地址。没有就空串。
+    只给命令文本，不替用户执行。"""
+    tmpl = (load().get(client) or {}).get("install_cmd")
+    return str(tmpl).replace("{url}", mcp_url(station, core_url)) if tmpl else ""
+
+
+def setup_link(client: str, station: str, core_url: str) -> str:
+    """一键安装链接（Cursor 有）：config 是 base64(JSON) 再做 URL 编码。没有就空串。"""
+    tmpl = (load().get(client) or {}).get("install_link")
+    if not tmpl:
+        return ""
+    payload = json.dumps({"url": mcp_url(station, core_url)}, ensure_ascii=False).encode("utf-8")
+    return str(tmpl).replace("{config}", urllib.parse.quote(base64.b64encode(payload).decode("ascii"), safe=""))
+
+
+def dispatch_link(client: str, lang: str | None = None) -> str:
+    """「派活」命令链接（Cursor 有）：text 是 URL 编码的一句话，让首领把用户接下来给的活派给帮手。没有就空串。"""
+    tmpl = (load().get(client) or {}).get("dispatch_link")
+    if not tmpl:
+        return ""
+    text = i18n.t("conn.cursor.dispatch_text", lang or i18n.lang())
+    return str(tmpl).replace("{text}", urllib.parse.quote(text, safe=""))
 
 
 # 上岗不替用户写任何 AI 软件的配置：核心只给首领一段话，让用户问过首领再自己加。

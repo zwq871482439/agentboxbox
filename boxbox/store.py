@@ -28,16 +28,15 @@ CREATE TABLE IF NOT EXISTS runs(
   exit INTEGER, status TEXT, tokens_json TEXT, commits INTEGER, dirty INTEGER, log_path TEXT, error TEXT,
   split_json TEXT);
 CREATE INDEX IF NOT EXISTS runs_station_ended ON runs(station, ended);
+CREATE INDEX IF NOT EXISTS runs_task ON runs(task_id);
 CREATE TABLE IF NOT EXISTS token_ledger(
   run_id TEXT, seq INTEGER, station TEXT, task_id TEXT,
   tok_in INTEGER, tok_out INTEGER, tok_cr INTEGER, tok_cw INTEGER, turns INTEGER,
   source TEXT, cost REAL, at TEXT, PRIMARY KEY(run_id, seq));
-CREATE TABLE IF NOT EXISTS channels(
-  name TEXT PRIMARY KEY, kind TEXT, device TEXT, script_path TEXT, enabled INTEGER,
-  authorized_by TEXT, last_run TEXT, last_exit INTEGER);
 CREATE TABLE IF NOT EXISTS events(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, kind TEXT, station TEXT, task_id TEXT, text TEXT, json TEXT);
 CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
+CREATE INDEX IF NOT EXISTS events_task ON events(task_id, kind);
 CREATE TABLE IF NOT EXISTS messages(
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, sender TEXT, receiver TEXT, text TEXT, read_at TEXT);
 CREATE TABLE IF NOT EXISTS stations_state(
@@ -95,7 +94,13 @@ class Store:
         self._add_cols("runs", ("session_dir", "last_tool", "last_tool_at", "last_tool_cmd", "last_tool_out",
                                 "last_output_at", "last_model_at", "last_tool_end_at", "tool_open",
                                 "stall_kind", "stall_since", "split_json"))
-        self._add_cols("tasks", ("cancel_note",))
+        self._add_cols("tasks", ("cancel_note", "assignee", "created_at", "updated_at", "done_at"))
+        # 顶栏 / 办公室每 5 秒数一遍：按状态 + 时间数、按帮手取最新一张，都只走索引，不读带 card_json 的整行。
+        # 建在补列之后：老库要先有这几列
+        self.db.executescript(
+            "CREATE INDEX IF NOT EXISTS tasks_state_done ON tasks(state, done_at);"
+            "CREATE INDEX IF NOT EXISTS tasks_state_updated ON tasks(state, updated_at);"
+            "CREATE INDEX IF NOT EXISTS tasks_assignee_created ON tasks(assignee, created_at);")
         cols = {r[1] for r in self.db.execute("PRAGMA table_info(stations_state)")}
         if "first_seen" not in cols:
             self.db.execute("ALTER TABLE stations_state ADD COLUMN first_seen TEXT")
@@ -184,6 +189,26 @@ class Store:
             if t.get("card_json"):
                 t["card"] = json.loads(t["card_json"])
         return rows
+
+    def count_tasks(self, states, since_col: str | None = None, since: str | None = None,
+                    with_runs: bool = False) -> int:
+        """只数数不取行：顶栏 / 办公室每 5 秒要一遍这些数，不能跟着任务总数一起变慢。
+        with_runs：runs 表里有运行记录才算（失败的卡没开工的不算失败）。"""
+        states = (states,) if isinstance(states, str) else tuple(states)
+        sql = "SELECT COUNT(*) n FROM tasks WHERE state IN (%s)" % ",".join("?" * len(states))
+        args = list(states)
+        if since is not None and since_col:
+            sql += " AND %s>=?" % since_col
+            args.append(str(since))
+        if with_runs:
+            sql += " AND EXISTS(SELECT 1 FROM runs WHERE runs.task_id=tasks.id)"
+        return int((self._row(sql, args) or {}).get("n") or 0)
+
+    def latest_task_at(self) -> dict[str, str]:
+        """{工位: 它名下最新一张卡的 created_at}：待办里判断旧失败 / 旧中断是不是最新那张用的。
+        一条聚合出来，不把卡读出来。"""
+        return {r["a"]: r["m"] for r in self._rows(
+            "SELECT assignee a, MAX(created_at) m FROM tasks GROUP BY assignee") if r["a"]}
 
     # ---- runs ----
     def insert_run(self, r: dict) -> None:

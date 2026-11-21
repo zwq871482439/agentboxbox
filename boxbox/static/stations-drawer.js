@@ -1,4 +1,6 @@
-/* 工位页脚本 · 查看详情抽屉（只读）。依赖 stations.js（先加载，公共工具都在 window.BXST 里）。 */
+/* 帮手页脚本 · 查看详情抽屉（只读）。依赖 stations.js（先加载，公共工具都在 window.BXST 里）。
+   抽屉顶上：此刻在干什么（一句话状态 + 最近 5 个动作，3 秒问一次 /api/stations/live）+ 概况三行；
+   原来的配置、连接、最近调度收在默认收起的「更多」里。 */
 (function () {
   var NS = window.BXST;
   var $ = NS.$, esc = NS.esc, api = NS.api, fmtDT = NS.fmtDT;
@@ -7,6 +9,37 @@
   var quotaModeLabel = NS.quotaModeLabel, quotaAdapterLabel = NS.quotaAdapterLabel;
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
   function kvRow(k, v) { return "<tr><th>" + esc(k) + "</th><td>" + (v == null || v === "" ? "—" : v) + "</td></tr>"; }
+
+  var liveTimer = null, liveId = null, drawerId = null;
+
+  /* 一个动作说成一句话：读文件 / 改文件 / 跑命令 / 在想 */
+  function actText(a) {
+    var kind = String(a.kind || "");
+    var label = { read: T("st.actRead"), edit: T("st.actEdit"),
+                  bash: T("st.actBash"), think: T("st.actThink") }[kind] || kind;
+    return label + (a.target ? "：" + a.target : "");
+  }
+
+  /* 概况三行：模型 / 额度 / 今天做完几个 */
+  function overviewRows(d) {
+    var st = d.station || {};
+    var pi = st.pi || {};
+    var isPi = st.client === "pi" || st.runner === "once";
+    var model = isPi ? (pi.model || "—")
+                     : ((d.board || {}).client ? clientLabel(d.board.client) : "—");
+    var quota = T("st.ovNoQuota");
+    if (d.quota && d.quota.ok) {
+      var ws = d.quota.windows || {};
+      var w = ws.month || ws.week || ws.h5;
+      if (w) { quota = T("st.quotaUsed", { n: Math.round(w.pct) }); }
+    } else if (d.quota && d.quota.ok === false) {
+      quota = T("st.quotaFail", { kind: d.quota.error_kind || T("st.quotaUnknown"), why: d.quota.error || "" });
+    }
+    var done = (d.today || {}).done || 0;
+    return kvRow(T("st.ovModel"), esc(model)) +
+           kvRow(T("st.ovQuota"), esc(quota)) +
+           kvRow(T("st.ovDone"), esc(done) + T("st.piece"));
+  }
 
   function drawerHTML(d) {
     var st = d.station || {};
@@ -18,13 +51,13 @@
     rows += kvRow(T("st.kv.role"), esc(st.role === "leader" ? T("st.badgeTopLeader") : T("st.roleMemberShort")));
     rows += kvRow(T("st.kv.station"), esc(st.id) + T("st.kv.slot", { slot: esc(st.slot || "-") }));
     if (st.role === "leader") {
-      /* 首领用的是用户自己常用的那家 AI 软件：连上了才点名是哪一家 */
+      /* 编程助手用的是用户自己常用的那家 AI 软件：连上了才点名是哪一家 */
       var shownClient = b.client || "";
       rows += kvRow(T("st.kv.app"), esc(shownClient ? clientLabel(shownClient) : T("st.yourApp")));
     } else {
       rows += kvRow(T("st.kv.mode"), esc(NS.modeText(st)));
     }
-    /* 复制出来的猫：目录是从原目录复制的 git worktree，分支 bx/<工位名> */
+    /* 复制出来的猫：目录是从原目录复制的 git worktree，分支 bx/<帮手名> */
     var cwdV = st.cwd ? esc(st.cwd) : T("st.cwdNone");
     if (st.cwd && st.cwd_from) {
       cwdV += T("st.cwdWorktree", { from: esc(st.cwd_from), id: esc(st.id) });
@@ -83,17 +116,52 @@
       }).join("");
       qb = parts || T("st.quotaUnknownWindow");
     } else if (d.quota && d.quota.ok === false) {
-      qb = T("st.quotaFail", { kind: d.quota.error_kind || T("st.quotaUnknown"), why: d.quota.error || "" });
+      qb = esc(T("st.quotaFail", { kind: d.quota.error_kind || T("st.quotaUnknown"), why: d.quota.error || "" }));
     }
     if (d.quota_peers && d.quota_peers.length) {           /* 共用一把 key 的猫，额度是同一份 */
       var peerSep = (window.BXi18n && window.BXi18n.lang() === "en") ? ", " : "、";
       qb += '<p class="hint">' + esc(T("st.quotaPeers", { names: d.quota_peers.join(peerSep) })) + "</p>";
     }
     cfg += '<div class="dsec"><h3>' + esc(T("st.kv.quotaLeft")) + "</h3>" + qb + "</div>";
-    return cfg;
+
+    var now = '<div class="dsec"><h3>' + esc(T("st.nowTitle")) + "</h3>" +
+      '<p class="now-line" id="d-now">' + esc((b.status_line || "").trim() || T("st.nowIdle")) + "</p>" +
+      '<ul class="acts" id="d-acts"></ul></div>';
+    var overview = '<div class="dsec"><h3>' + esc(T("st.overview")) + '</h3><table class="kv">' +
+      overviewRows(d) + "</table></div>";
+    var more = '<details class="adv"><summary>' + esc(T("st.more")) + "</summary>" + cfg + "</details>";
+    return now + overview + more;
+  }
+
+  /* 抽屉开着的时候每 3 秒问一次这只猫此刻在干什么 */
+  function refreshLive() {
+    if (!liveId) { return; }
+    api("/api/stations/live?id=" + encodeURIComponent(liveId)).then(function (d) {
+      if (!d || !liveId) { return; }
+      var line = $("#d-now");
+      if (line) { line.textContent = (d.status_line || "").trim() || T("st.nowIdle"); }
+      var list = $("#d-acts");
+      if (list) {
+        var acts = (d.actions || []).slice(-5).reverse();
+        list.innerHTML = acts.length ? acts.map(function (a) {
+          return '<li><span class="ts">' + esc(fmtDT(a.at)) + "</span>" + esc(actText(a)) + "</li>";
+        }).join("") : "<li>" + esc(T("st.noActs")) + "</li>";
+      }
+    }).catch(function () {});
+  }
+  function startLive(id) {
+    stopLive();
+    liveId = id;
+    liveTimer = setInterval(refreshLive, 3000);
+    refreshLive();
+  }
+  function stopLive() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    liveId = null;
   }
 
   function openDrawer(id) {
+    drawerId = id;
     $("#drawer").hidden = false;
     $("#drawerBack").hidden = false;
     $("#d-name").textContent = id;
@@ -108,18 +176,20 @@
       if (!d || !d.ok) { $("#d-sub").textContent = (d && d.text) || T("st.noDetail"); return; }
       var b = d.board || {};
       var st = d.station || {};
-      var who = st.role === "leader" ? T("st.badgeTopLeader") : T("st.badgeTopMember", { slot: st.slot || "-" });
-      $("#d-sub").textContent = T("st.workNo", { n: workNo(st) }) + " · " + who +
-        " · " + T("st.state") + (b.word || "-") + " · " + T("st.onDuty", { x: b.first_seen ? fmtDT(b.first_seen) : T("st.neverOnDuty") });
+      $("#d-name").textContent = (st.label || "").trim() || (st.name && st.name !== st.id ? st.name : "") || st.id || id;
+      /* 副标题只写编号、状态、上岗时间：角色在下面「角色」那一行，写长了会把「关掉」按钮挤到折行 */
+      $("#d-sub").textContent = T("st.workNo", { n: workNo(st) }) + " · " + T("st.state") + (b.word || "-") +
+        " · " + T("st.onDuty", { x: b.first_seen ? fmtDT(b.first_seen) : T("st.neverOnDuty") });
       $("#d-body").innerHTML = drawerHTML(d);
+      startLive(id);
     }).catch(function (e) {
       $("#d-sub").textContent = T("st.noDetail") + ": " + String(e);
     });
   }
-  function closeDrawer() { $("#drawer").hidden = true; $("#drawerBack").hidden = true; }
+  function closeDrawer() { $("#drawer").hidden = true; $("#drawerBack").hidden = true; stopLive(); }
   $("#d-close").onclick = closeDrawer;
   $("#drawerBack").onclick = closeDrawer;
-  $("#d-edit").onclick = function () { closeDrawer(); NS.openForm($("#d-name").textContent); };
+  $("#d-edit").onclick = function () { closeDrawer(); NS.openForm(drawerId); };
 
   NS.openDrawer = openDrawer;
 })();

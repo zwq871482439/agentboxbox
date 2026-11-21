@@ -17,35 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .. import config, i18n, mcp_client
 from ..ports import is_restricted
 from . import http_api
-from .http_const import (
-    _HHMM,
-    COPY_DECOR,
-    COPY_SKIP,
-    COPY_TAIL_RE,
-    DISPATCH_EVENT_KINDS,
-    LEADER_EVENT_KINDS,
-    LEADER_EVENT_MAX,
-    ROLE_ALIASES,
-    RUNNING_STATES,
-    SETTINGS_BOOLS,
-    SETTINGS_INTS,
-    STATION_ROLES,
-    STATION_RUNNERS,
-    TOOLS,
-)
-from .http_core import Core, _as_int, _meta, _onboard_state, _task_view, http_tips, normalize_role, running_task_ids, settings_patch
-from .http_leader import _event_line, _hhmm, _leader_events, _leader_new, _leader_seen_key, _wait_for_update, hire_prompt
-from .http_stations import _copy_name, _git, _is_git_repo, _make_worktree, _quota_errors, _running_cards, _station_detail, _station_errors, _summon
-
-__all__ = ["Core", "serve", "hire_prompt", "_summon",
-           # 拆文件之前这些名字都在本模块里，外面可能按老名字取：原样再导出，位置变了、名字没变
-           "TOOLS", "STATION_ROLES", "STATION_RUNNERS", "ROLE_ALIASES", "SETTINGS_INTS", "SETTINGS_BOOLS",
-           "COPY_DECOR", "COPY_SKIP", "COPY_TAIL_RE", "LEADER_EVENT_KINDS", "LEADER_EVENT_MAX",
-           "RUNNING_STATES", "DISPATCH_EVENT_KINDS", "_HHMM", "normalize_role", "_as_int",
-           "settings_patch", "http_tips", "_task_view", "_onboard_state", "_meta", "running_task_ids",
-           "_hhmm", "_event_line", "_leader_events", "_leader_seen_key", "_leader_new", "_wait_for_update",
-           "_station_errors", "_quota_errors", "_copy_name", "_running_cards", "_git", "_is_git_repo",
-           "_make_worktree", "_station_detail"]
+from .http_core import Core, _meta
+from .http_leader import hire_prompt as hire_prompt  # 外面按老名字从这里取
 
 PKG_STATIC = pathlib.Path(__file__).resolve().parent.parent / "static"     # boxbox/static: pages served by the core
 
@@ -56,8 +29,8 @@ ICON_DIR = config.BUNDLE / "assets" / "icon"                                # ap
 LEGAL = {"/legal/privacy": "PRIVACY.md", "/legal/license": "LICENSE",
          "/legal/notices": "THIRD_PARTY_NOTICES.md", "/legal/third-party": "THIRD_PARTY_LICENSES.txt"}
 
-PAGES = {"/": "home.html", "/board": "index.html", "/onboard": "onboard.html", "/stations": "stations.html", "/doctor": "doctor.html",
-         "/office": "office.html", "/settings": "settings.html"}
+PAGES = {"/": "home.html", "/board": "index.html", "/stations": "stations.html", "/doctor": "doctor.html",
+         "/office": "office.html", "/settings": "settings.html", "/capabilities": "capabilities.html"}
 
 PORT_REBIND_TRIES = 20          # 撞上禁用端口最多重绑几次
 
@@ -161,6 +134,7 @@ class Handler(BaseHTTPRequestHandler):
         was_inited = station in inited
         if "initialize" in methods:
             inited.add(station)
+            self.core.note_connected(station)   # 客户端启用盒子就会自己连：这就算连上了，不等对话里有人说话
         link = "mcp" if station in inited else "http"
         kv = d.store.kv_get("station_link") or {}
         if kv.get(station) != link:
@@ -225,7 +199,18 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return p if p.is_file() else None
 
+    def _foreign_source(self) -> bool:
+        """请求是不是从别的站来的：Host 不是本机本端口（DNS 重绑）、或浏览器自己报了 cross-site。
+        没带 Host 的本机老脚本放行。页面攻击者写的 <img> 只能带这两个特征之一，都挡下。"""
+        host = (self.headers.get("Host") or "").strip()
+        port = self.server.server_port
+        if host and host not in ("127.0.0.1:%d" % port, "localhost:%d" % port):
+            return True
+        return (self.headers.get("Sec-Fetch-Site") or "").strip().lower() == "cross-site"
+
     def do_GET(self):
+        if self._foreign_source():
+            return self._json({"ok": False, "code": "forbidden"}, 403)
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
         d = self.core.d
@@ -290,6 +275,8 @@ class Handler(BaseHTTPRequestHandler):
             return http_api.handle_get(self, u, q)
 
     def do_POST(self):
+        if self._foreign_source():
+            return self._json({"ok": False, "code": "forbidden"}, 403)
         origin = self.headers.get("Origin")
         if origin and origin.rstrip("/") not in ("http://127.0.0.1:%d" % self.server.server_port, "http://localhost:%d" % self.server.server_port):
             return self._json({"ok": False, "code": "forbidden", "text": "bad origin"}, 403)

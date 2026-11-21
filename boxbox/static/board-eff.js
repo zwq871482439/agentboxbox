@@ -4,15 +4,11 @@
 
   function T(k, v) { return window.BXi18n ? window.BXi18n.t(k, v) : k; }
   function $(id) { return document.getElementById(id); }
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-  function num(n) {
-    if (n == null) { return T("bd.eff.dash"); }
-    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  }
+  /* 共用工具在 util.js 里 */
+  var U = window.BXu;
+  var esc = U.esc;
+  /* 这里要的是带千分位给人看的数字，空值写「—」 */
+  function fmtNum(n) { return U.fmtNum(n, T("bd.eff.dash")); }
   function dur(sec) {
     if (sec == null) { return T("bd.eff.dash"); }
     var whole = Math.round(Number(sec) || 0);
@@ -35,7 +31,7 @@
   }
   function when(iso) {
     if (!iso) { return T("bd.eff.dash"); }
-    return String(iso).replace("T", " ").slice(0, 16);
+    return U.whenFull(iso);
   }
 
   function summary(d) {
@@ -80,11 +76,11 @@
     var id = cards ? ' data-id="' + esc(row.task_id) + '"' : "";
     return "<tr" + id + ">" + who + extra +
       td(esc(dur(row.seconds)), "num") +
-      td(esc(num(row.turns)), "num") +
-      td(esc(num(row.tools)), "num") +
-      td(esc(num(row.tok_in)), "num") +
-      td(esc(num(row.tok_out)), "num") +
-      td(esc(num(row.tok_cr)), "num") +
+      td(esc(fmtNum(row.turns)), "num") +
+      td(esc(fmtNum(row.tools)), "num") +
+      td(esc(fmtNum(row.tok_in)), "num") +
+      td(esc(fmtNum(row.tok_out)), "num") +
+      td(esc(fmtNum(row.tok_cr)), "num") +
       td(esc(hit(row.hit)), "num") +
       td(esc(cost(row)), "num") + tail + "</tr>";
   }

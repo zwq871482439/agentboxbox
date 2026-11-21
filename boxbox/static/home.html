@@ -24,6 +24,18 @@ a{color:inherit}
 .stage{position:relative;flex:1;min-height:200px;margin:8px 12px 12px}
 .office-wrap{position:absolute;inset:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#15151e}
 .office-wrap iframe{display:block;width:100%;height:100%;border:0;background:#15151e}
+/* 画布上的两个像素小框：右下角图例、左上角「开始用：三步」。米白底 + 2px 深色描边 + 硬阴影 + 方角 */
+.pxbox{position:absolute;z-index:6;background:#fbf3e1;border:2px solid #2b1d12;border-radius:0;
+ box-shadow:4px 4px 0 rgba(0,0,0,.45);color:#2b1d12;font-size:12.5px;line-height:1.65}
+.pxlegend{right:10px;bottom:10px;padding:5px 9px;display:flex;gap:12px;align-items:center;white-space:nowrap}
+.pxlegend b{font-weight:700}
+.pxlegend .c-you{color:#c0392b}.pxlegend .c-ask{color:#2f6fb5}.pxlegend .c-fail{color:#c0392b}.pxlegend .c-rest{color:#7c7c7c}
+.pxsteps{padding:8px 10px;max-width:min(320px,calc(100% - 20px))}
+.pxsteps .ttl{font-weight:700;margin-bottom:3px}
+.pxsteps ul{margin:0;padding:0;list-style:none}
+.pxsteps li{margin:2px 0}
+.pxsteps .mk{display:inline-block;width:14px;font-weight:700}
+.pxsteps .note{color:#6b4a2f;font-size:11.5px;margin-left:4px}
 /* 面板浮窗：入口在办公室画布里（动态 / 用量按钮），浮窗右上角是 ×。停靠条那行的样式已删。 */
 /* 小浮窗：从停靠条的按钮下方弹出。像素风 = 方角 + 2px 深色描边 + 硬阴影；打开时 120ms 里从 0.9 倍缩放 + 上移 2px 弹出
    开关记在浏览器里；DOM 不重建，轮询只换里面的内容 */
@@ -92,11 +104,14 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
 #bx-resume.on{display:block}
 </style><script src="/static/i18n.js"></script>
 <script src="/static/i18n-home.js"></script>
+<script src="/static/i18n-stations.js"></script><!-- 共用的 Pi 配置表的词条在 i18n-stations.js 的 pf.* 里 -->
+<script src="/static/util.js"></script>
 <script src="/static/topbar.js" defer></script>
 <!-- 上岗脚本：画猫代码（/static/cats.js 就是 office/build/cats.js）+ 服务商清单 + 上岗流程
      （像素窗口，按公共底座 / 首领 / 打工猫 / 编排拆四个文件，flow 依赖前面几个） -->
 <script src="/static/cats.js"></script>
 <script src="/static/providers.js"></script>
+<script src="/static/pi-form.js"></script><!-- 共用的 Pi 配置表：上岗「加一个帮手」和帮手页「修改配置」用同一份 -->
 <script src="/static/onboard-common.js"></script>
 <script src="/static/onboard-leader.js"></script>
 <script src="/static/onboard-member.js"></script>
@@ -109,6 +124,22 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
 <div class="stage" id="stage">
   <div class="office-wrap" id="office-wrap">
     <iframe id="office-frame" title="办公室视图" data-i18n-title="home.officeTitle"></iframe>
+    <!-- 画布右下角的图例：符号配一句话，颜色跟画布里一样 -->
+    <div class="pxbox pxlegend" id="bx-legend">
+      <span><b class="c-you">!</b> <span data-i18n="home.legend.you"></span></span>
+      <span><b class="c-ask">?</b> <span data-i18n="home.legend.ask"></span></span>
+      <span><b class="c-fail">×</b> <span data-i18n="home.legend.fail"></span></span>
+      <span><b class="c-rest">Zzz</b> <span data-i18n="home.legend.rest"></span></span>
+    </div>
+    <!-- 「开始用：三步」小卡：上岗走完才有；三步都做完就不显示 -->
+    <div class="pxbox pxsteps" id="bx-steps" hidden>
+      <div class="ttl" data-i18n="home.start.title"></div>
+      <ul>
+        <li><span class="mk" id="bx-mk1">○</span><span data-i18n="home.start.s1"></span><span class="note" id="bx-nt1"></span></li>
+        <li><span class="mk" id="bx-mk2">○</span><span data-i18n="home.start.s2"></span><span class="note" id="bx-nt2"></span></li>
+        <li><span class="mk" id="bx-mk3">○</span><span data-i18n="home.start.s3"></span><span class="note" id="bx-nt3"></span></li>
+      </ul>
+    </div>
     <script>
       /* 首页的 ?clock= / ?seed= / ?phase= 透传给办公室画布（截图脚本和办公室用例靠这三个钩子钉住
          墙上时钟、随机数和天色；不放这三个参数时就是平时的样子） */
@@ -134,12 +165,12 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
       <span class="sp"><button type="button" class="more" id="tl-more" style="padding:0" data-i18n="home.allCount0">全部 0 条</button></span>
     </div>
     <div id="tl"><div class="empty" data-i18n="home.readingFeed">正在读动态…</div></div>
-    <div class="foot" data-i18n="home.feedFoot">每 5 秒看一次工位，每 15 秒看一次动态和用量。</div>
+    <div class="foot" data-i18n="home.feedFoot">每 5 秒看一次帮手，每 15 秒看一次动态和用量。</div>
   </aside>
 
   <aside class="pnl" id="pnl-tok"><button class="pnl-x" type="button" data-p="tok" title="收起" data-i18n-title="home.collapse">×</button>
     <div class="ph"><h2 class="sec" data-i18n="home.panel.usage">用量</h2>
-      <span class="n" data-i18n="home.usageNote">按每次运行实测的 token 记；拿不到 token 的工位（外部客户端）写「不计」</span></div>
+      <span class="n" data-i18n="home.usageNote">按每次运行实测的用量记；量不到用量的写「不计」</span></div>
     <div id="tok"><div class="empty" data-i18n="home.readingUsage">正在读用量…</div></div>
     <div class="foot" id="tok-foot"></div>
   </aside>
@@ -154,7 +185,7 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="drawer" style="width:min(760px,96vw)">
   <div class="offcanvas-header">
-    <h2 class="offcanvas-title" id="dr-title" style="font-weight:700;font-size:20px" data-i18n="home.summonTitle">叫醒首领</h2>
+    <h2 class="offcanvas-title" id="dr-title" style="font-weight:700;font-size:20px" data-i18n="home.summonTitle">叫醒编程助手</h2>
     <button type="button" class="btn-close btn-close-white" id="dr-close"></button></div>
   <div class="offcanvas-body"><div class="dim mb-2" id="dr-note"></div><div id="dr-html"></div></div>
 </div>
@@ -184,51 +215,20 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
   var t = function (key, vars) { return window.BXi18n.t(key, vars); };
   /* 问后端要文案时要带上语言，后端照这个语言回 */
   function langParam() { return "?lang=" + window.BXi18n.lang(); }
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-  function num(n) { if (n == null) return "—"; return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
-  function hm(iso) {
-    if (!iso) return "—";
-    var d = new Date(iso);
-    if (isNaN(d)) return String(iso).slice(11, 16) || "—";
-    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
-  }
-  function when(iso) {
-    if (!iso) return "—";
-    var d = new Date(iso);
-    if (isNaN(d)) return String(iso).replace("T", " ").slice(0, 16);
-    var now = new Date();
-    var same = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-    var md = ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
-    return (same ? "" : md + " ") + hm(iso);
-  }
-  function api(p) {
-    return fetch(p, { cache: "no-store" }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
-    }).catch(function (e) { return { ok: false, error: String(e) }; });
-  }
-  function copy(text, btn) {
-    var done = function () { var o = btn.textContent; btn.textContent = t("home.copied"); setTimeout(function () { btn.textContent = o; }, 1500); };
-    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, fb); } else { fb(); }
-    function fb() {
-      var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
-      document.body.appendChild(ta); ta.select();
-      try { document.execCommand("copy"); done(); } catch (e) { btn.textContent = t("home.copyFail"); }
-      document.body.removeChild(ta);
-    }
-  }
+  /* 共用工具在 util.js 里 */
+  var esc = window.BXu.esc;
+  var fmtNum = window.BXu.fmtNum;
+  var hm = window.BXu.hm;
+  var when = window.BXu.when;
 
   /* 文案：只说人话。运行方式这些内部词翻成中文，主文案里不露英文状态词。 */
   var RUNNER_WORD = { manual: "home.runnerManual", once: "home.runnerOnce", scheduled: "home.runnerScheduled" };
   function runnerWord(r) { return t(RUNNER_WORD[r] || (r ? "home.runnerCustom" : "home.runnerNone")); }
   function roleWord(r) { return t(r === "leader" ? "home.roleLeader" : "home.roleMember"); }
-  /* 客户端显示名：首领那行显示「真正连上来的那一家」 */
-  var CLIENT_LABEL = { cursor: "Cursor", "claude-code": "Claude Code", codex: "Codex",
-    other: "home.clientOther", "other-direct": "home.clientOtherDirect" };
-  function clientLabel(c) { var k = CLIENT_LABEL[c]; return k ? t(k) : String(c || ""); }
+  /* 客户端显示名：首领那行显示「真正连上来的那一家」，名字表在 util.js 里 */
+  function clientLabel(c) {
+    return window.BXu.clientLabel(c, { other: t("home.clientOther"), otherDirect: t("home.clientOtherDirect") });
+  }
   /* 「需要我处理的」= 第 1 级提醒相关的事件（口径跟 /api/meta 的 alerts 走）：
      等你验收的卡（reviewing 事件带 who=user），以及第 1 级提醒点名的那张卡 */
   function evData(e) { if (e.data) return e.data; try { e.data = e.json ? JSON.parse(e.json) : {}; } catch (x) { e.data = {}; } return e.data; }
@@ -273,7 +273,8 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
   var officeFrame = $("#office-frame");
   if (officeFrame) officeFrame.addEventListener("load", function () { pushUnread(); });
 
-  var S = { meta: null, stations: [], todo: null, events: [], tokens: null, doctor: null, alive: false, stamp: "—", onlyMe: false };
+  var S = { meta: null, stations: [], tokens: null, doctor: null, onlyMe: false,
+            onboardDone: false, leaderConnected: false, stepStations: [], stepTask: false };
   var TL_N = 12;
   var EV = [];
 
@@ -334,8 +335,8 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
     var d = S.tokens, box = $("#tok");
     if (!d) { box.innerHTML = '<div class="empty">' + esc(t("home.readingUsage")) + "</div>"; return; }
     var rows = (d.stations || []).map(function (r) {
-      return "<tr><td>" + esc(r.station) + '</td><td class="num">' + num(r.tok_in) + "</td><td class='num'>" + num(r.tok_out) +
-        "</td><td class='num'>" + num(r.tok_cr) + "</td><td class='num'>" + num(r.tok_cw) +
+      return "<tr><td>" + esc(r.station) + '</td><td class="num">' + fmtNum(r.tok_in) + "</td><td class='num'>" + fmtNum(r.tok_out) +
+        "</td><td class='num'>" + fmtNum(r.tok_cr) + "</td><td class='num'>" + fmtNum(r.tok_cw) +
         "</td><td class='num'>" + (r.cost == null ? t("home.noPrice") : esc(r.cost)) +
         "</td><td class='num'>" + esc(costEst(r.cost_est)) + "</td><td>" + quotaCell(r.quota) + "</td></tr>";
     });
@@ -362,9 +363,9 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
     var d = S.doctor, box = $("#conn");
     if (!d) { box.innerHTML = '<div class="empty">' + esc(t("home.readingCheck")) + "</div>"; return; }
     var s = d.summary || {};
-    var head = '<div class="ph"><span class="sw w-run">' + esc(t("home.docPass", { n: num(s.ok) })) + "</span>" +
-      '<span class="sw ' + (s.fail ? "w-fail" : "dim") + '">' + esc(t("home.docFail", { n: num(s.fail) })) + "</span>" +
-      '<span class="sw w-idle">' + esc(t("home.docSkip", { n: num(s.skip) })) + "</span></div>";
+    var head = '<div class="ph"><span class="sw w-run">' + esc(t("home.docPass", { n: fmtNum(s.ok) })) + "</span>" +
+      '<span class="sw ' + (s.fail ? "w-fail" : "dim") + '">' + esc(t("home.docFail", { n: fmtNum(s.fail) })) + "</span>" +
+      '<span class="sw w-idle">' + esc(t("home.docSkip", { n: fmtNum(s.skip) })) + "</span></div>";
     var bad = (d.checks || []).filter(function (c) { return c.ok === false; });
     if (!bad.length) {
       box.innerHTML = head + '<div class="empty">' + esc(t("home.docAllGood")) + "</div>";
@@ -378,9 +379,9 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
   }
   $("#doc-re").onclick = function () { S.doctor = null; renderDoc(); loadDoctor(); };
   /* 语言换了：面板里的字重画一遍（顶栏自己管，静态文案由 i18n.js 换） */
-  addEventListener("bx-lang-changed", function () { renderTL(); renderTok(); renderDoc(); });
+  addEventListener("bx-lang-changed", function () { renderTL(); renderTok(); renderDoc(); renderSteps(); });
 
-  /* ---------- 抽屉：叫醒首领 ---------- */
+  /* ---------- 抽屉：叫醒编程助手 ---------- */
   function drawer(title, note, html) {
     $("#dr-title").textContent = title;
     $("#dr-note").innerHTML = note || "";
@@ -413,10 +414,10 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
     kv.push([t("home.kvHow"), esc(runnerWord(d.runner))]);
     kv.push(
       [t("home.kvState"), esc(st.word || "–") + (st.minutes != null ? " " + t("home.minutes", { n: st.minutes }) : "")],
-      [t("home.kvTodo"), num(st.open) + " " + t("home.todoCount")],
+      [t("home.kvTodo"), fmtNum(st.open) + " " + t("home.todoCount")],
       [t("home.kvSeen"), esc(when(st.last_seen))]
     );
-    if (d.every_min != null) kv.push([t("home.kvEvery"), t("home.everyMin", { n: num(d.every_min) })]);
+    if (d.every_min != null) kv.push([t("home.kvEvery"), t("home.everyMin", { n: fmtNum(d.every_min) })]);
     if (d.every_min != null) {
       kv.push([t("home.kvLastRun"), st.last_scheduled_at ? esc(when(st.last_scheduled_at)) : t("home.kvNever")]);
     }
@@ -432,9 +433,23 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
     var steps = (d.steps || []).length
       ? "<ol>" + d.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>"
       : "";
+    /* 装进编程助手：装一次以后新对话不用再贴话（一键链接 / 终端命令，和上岗第 1 步同一套） */
+    var app = d.client_label || "";
+    var installBox = d.install_link
+      ? '<div class="ph"><a class="btn-lite p" id="installLink" href="' + esc(d.install_link) + '">' +
+        esc(t("home.installBtn", { app: app })) + "</a></div>"
+      : (d.install_cmd
+        ? "<pre>" + esc(d.install_cmd) + '</pre><div class="ph"><button type="button" class="btn-lite p" id="cpInstall">' +
+          esc(t("home.copyCmd")) + "</button></div>"
+        : "");
+    var install = installBox
+      ? "<h4>" + esc(t("home.installTitle", { app: app })) + "</h4>" +
+        '<div class="hint">' + esc(t("home.installNote", { app: app })) + "</div>" + installBox +
+        "<h4>" + esc(t("home.pasteInstead")) + "</h4>"
+      : "";
     return '<table class="table kv mb-0"><tbody>' + kv.map(function (p) {
       return "<tr><th>" + esc(p[0]) + "</th><td>" + p[1] + "</td></tr>";
-    }).join("") + "</tbody></table>" +
+    }).join("") + "</tbody></table>" + install +
       "<h4>" + esc(t("home.where")) + "</h4><div>" + esc(d.where || "—") + "</div>" +
       "<h4>" + esc(t("home.what")) + "</h4>" + promptBox +
       (snipBox ? "<h4>" + esc(t("home.snippet")) + "</h4>" + snipBox : "") +
@@ -446,11 +461,15 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
       return;
     }
     drawer(t("home.summonTitleFor", { sid: sid }), t("home.summonReading"), "");
-    api("/api/summon/" + encodeURIComponent(sid) + langParam()).then(function (r) {
+    window.BXu.api("/api/stations", { cache: "no-store" }).then(function (r) {      /* 工位列表只有召唤抽屉要用，等打开再取，平时不轮询 */
+      if (r.ok && r.data) { S.stations = r.data.stations || []; }
+      return window.BXu.api("/api/summon/" + encodeURIComponent(sid) + langParam(), { cache: "no-store" });
+    }).then(function (r) {
       drawer(t("home.summonTitleFor", { sid: sid }), "",
         summonHtml(sid, r.ok ? r.data : { error: r.error || t("home.summonDown") }));
-      var cp = $("#cpPrompt"); if (cp) cp.onclick = function () { copy(r.data.prompt || "", this); };
-      var cs = $("#cpSnip"); if (cs) cs.onclick = function () { copy(r.data.snippet || "", this); };
+      var cp = $("#cpPrompt"); if (cp) cp.onclick = function () { window.BXu.copy(r.data.prompt || "", this, t("home.copied"), t("home.copyFail")); };
+      var cs = $("#cpSnip"); if (cs) cs.onclick = function () { window.BXu.copy(r.data.snippet || "", this, t("home.copied"), t("home.copyFail")); };
+      var ci = $("#cpInstall"); if (ci) ci.onclick = function () { window.BXu.copy(r.data.install_cmd || "", this, t("home.copied"), t("home.copyFail")); };
     });
   }
 
@@ -491,6 +510,7 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
   addEventListener("resize", function () {                       /* 窗口变了浮窗跟着挪，别飘到屏幕外 */
     var cur = (document.querySelector(".pnl.open") || {}).id;
     if (cur) placePnl(cur.replace(/^pnl-/, ""));
+    placeSteps();
   });
 
   addEventListener("message", function (e) {          /* 画布里点了「动态」「用量」→ 开同名面板（再点一次收起） */
@@ -559,7 +579,7 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
       .catch(function () { return {}; });
   }
   function askInterrupted() {
-    return api("/api/interrupted").then(function (r) {
+    return window.BXu.api("/api/interrupted", { cache: "no-store" }).then(function (r) {
       if (!r.ok) return;
       var cards = r.data.cards || [];
       if (!cards.length) return;
@@ -580,26 +600,90 @@ h2.sec{font-weight:700;font-size:20px;color:#fff;margin:0;line-height:1.2}
   }
   askInterrupted();
 
-  /* ---------- 轮询 ---------- */
-  function startPolling() {
-    pollFast(); pollSlow();
-    setInterval(pollFast, 5000);
-    setInterval(pollSlow, 15000);
+  /* ---------- 画布上的「开始用：三步」小框 ---------- */
+  /* 三步：① 装进你的编程助手（它连上了）② 加一个帮手（有一个帮手了）③ 派出过一个任务。
+     上岗走完（/api/onboard/state 的 step 是 0）才有这张卡；三步都做完就不显示了。
+     位置跟着画布里「动态 / 用量」那两个按钮（世界坐标 8,12 起，48×16 高），按钮下面一行。 */
+  function stepRows() {
+    var sts = S.stepStations || [];
+    var lead = sts.filter(function (s) { return s.role === "leader"; })[0] || {};
+    var helper = sts.filter(function (s) { return s.role !== "leader"; })[0] || {};
+    var client = lead.client_label || (lead.client ? clientLabel(lead.client) : "");
+    return [
+      { done: S.leaderConnected, note: client ? t("home.step.connected", { c: client }) : "" },
+      { done: !!helper.id, note: helper.id ? t("home.step.helperReady", { n: helper.id }) : "" },
+      { done: !!S.stepTask, note: S.stepTask ? t("home.step.taskSent") : "" }
+    ];
   }
-  function loadDoctor() { api("/api/doctor").then(function (r) { if (r.ok) { S.doctor = r.data; renderDoc(); } }); }
-  function pollFast() {
-    return Promise.all([api("/api/health"), api("/api/meta"), api("/api/stations"), api("/api/todo")]).then(function (rs) {
-      var ok = false;
-      rs.forEach(function (r) { if (r.ok) ok = true; });
-      S.alive = ok;
-      if (rs[0].ok && rs[1].ok) { S.meta = rs[1].data; }
-      if (rs[2].ok && rs[2].data) { S.stations = rs[2].data.stations || []; }
-      if (rs[3].ok && rs[3].data) { S.todo = rs[3].data; }
-      S.stamp = hm(new Date().toISOString());
+  function renderSteps() {
+    var card = $("#bx-steps");
+    if (!card) { return; }
+    var rows = stepRows();
+    var all = rows.every(function (r) { return r.done; });
+    card.hidden = !(S.onboardDone && !all);
+    rows.forEach(function (r, i) {
+      var mk = $("#bx-mk" + (i + 1)), nt = $("#bx-nt" + (i + 1));
+      if (mk) { mk.textContent = r.done ? "✓" : "○"; }
+      if (nt) { nt.textContent = r.note; }
     });
+    if (!card.hidden) { placeSteps(); }
   }
+  function placeSteps() {
+    var wrap = $("#office-wrap"), card = $("#bx-steps"), f = $("#office-frame");
+    if (!wrap || !card || !f) { return; }
+    var wr = wrap.getBoundingClientRect();
+    var left = wr.left + 10, top = wr.top + 44;
+    try {
+      var doc = f.contentDocument, cv = doc && doc.getElementById("cv");
+      if (cv) {
+        var fr = f.getBoundingClientRect(), r = cv.getBoundingClientRect();
+        var k = r.width / 480;                       /* 画布世界坐标 480×270，嵌进来按比例放大 */
+        left = fr.left + r.left + 8 * k;             /* 「动态 / 用量」按钮的左边 */
+        top = fr.top + r.top + 32 * k;              /* 按钮下面一行 */
+      }
+    } catch (e) { }
+    card.style.left = Math.max(6, Math.round(left - wr.left)) + "px";
+    card.style.top = Math.max(6, Math.round(top - wr.top)) + "px";
+  }
+  function updateSteps() {
+    return Promise.all([
+      window.BXu.api("/api/onboard/state", { cache: "no-store" }),
+      window.BXu.api("/api/stations", { cache: "no-store" }),
+      window.BXu.api("/api/tasks?limit=1", { cache: "no-store" })
+    ]).then(function (rs) {
+      S.onboardDone = !!(rs[0].ok && rs[0].data && !rs[0].data.step);
+      /* 连上 = 客户端启用了盒子（不用等它在对话里调过工具） */
+      S.leaderConnected = !!(rs[0].ok && rs[0].data && rs[0].data.leader && !rs[0].data.leader_unshaken);
+      S.stepStations = (rs[1].ok && rs[1].data && rs[1].data.stations) || [];
+      S.stepTask = !!(rs[2].ok && rs[2].data && (rs[2].data.tasks || []).length);
+      renderSteps();
+    }).catch(function () { });
+  }
+  if (officeFrame) { officeFrame.addEventListener("load", placeSteps); }
+
+  /* ---------- 轮询 ---------- */
+  /* 首页不再自己快轮询：提醒（meta）听顶栏 topbar.js 发的 bx-top 事件，健康看顶栏圆点，
+     待办不在这看；这里只慢慢刷动态和用量 */
+  function startPolling() {
+    pollSlow();
+    setInterval(pollSlow, 15000);
+    updateSteps();
+    setInterval(updateSteps, 10000);   /* 三步做完没有：每 10 秒重算一次 */
+  }
+  function loadDoctor() { window.BXu.api("/api/doctor", { cache: "no-store" }).then(function (r) { if (r.ok) { S.doctor = r.data; renderDoc(); } }); }
+  var lastSeen = null;
+  addEventListener("bx-top", function (e) {
+    var meta = (e.detail || {}).meta;
+    if (meta) { S.meta = meta; }
+    var seen = (meta || {}).leader_last_seen || "";
+    if (seen !== lastSeen) { lastSeen = seen; updateSteps(); }   /* 编程助手刚连上：三步卡马上跟上 */
+  });
   function pollSlow() {
-    return Promise.all([api("/api/timeline?limit=100"), api("/api/tokens")]).then(function (rs) {
+    if (document.hidden) return;   /* 后台标签页不轮询，回前台后下一拍补上 */
+    return Promise.all([
+      window.BXu.api("/api/timeline?limit=100", { cache: "no-store" }),
+      window.BXu.api("/api/tokens", { cache: "no-store" })
+    ]).then(function (rs) {
       if (rs[0].ok && rs[0].data) { EV = rs[0].data.events || []; renderTL(); }
       if (rs[1].ok && rs[1].data) { S.tokens = rs[1].data; renderTok(); }
     });

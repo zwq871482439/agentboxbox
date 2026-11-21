@@ -11,6 +11,7 @@ import pathlib
 import re
 
 from . import classify, i18n, runlog, stall
+from .dispatcher_util import _elapsed, _hhmm
 
 MAX_REASON = 800
 # 一层目录里文件太多就不再数：避免对着大目录把收尾拖住
@@ -26,7 +27,8 @@ def for_failure(run: dict, res, card: dict, lang: str, station: str) -> dict | N
     if not _used(run, res):
         return None
     turns = _turns(res, run)
-    dur_s = _elapsed(run.get("started"))
+    dur = _elapsed(run.get("started"))
+    dur_s = int(max(0, dur)) if dur is not None else None
     phrase = headline(lang, getattr(res, "exit", None), turns, dur_s)
     reason = _assemble(run, res, card, lang, phrase)
     data: dict = {"half": True, "exit": int(getattr(res, "exit", None) or 0)}
@@ -114,19 +116,6 @@ def _as_int(value) -> int | None:
         return None
 
 
-def _elapsed(started) -> int | None:
-    if not started:
-        return None
-    try:
-        start = _dt.datetime.fromisoformat(str(started))
-    except ValueError:
-        return None
-    now = _dt.datetime.now().astimezone()
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=now.tzinfo)
-    return max(0, int((now - start).total_seconds()))
-
-
 def _latest_hhmm(run) -> str:
     best = ""
     for key in ("last_model_at", "last_tool_at", "last_output_at", "last_activity"):
@@ -134,13 +123,6 @@ def _latest_hhmm(run) -> str:
         if raw > best:
             best = raw
     return _hhmm(best) if best else ""
-
-
-def _hhmm(ts) -> str:
-    try:
-        return _dt.datetime.fromisoformat(str(ts)).strftime("%H:%M")
-    except (TypeError, ValueError):
-        return ""
 
 
 def _tool_sentence(run, lang) -> str:

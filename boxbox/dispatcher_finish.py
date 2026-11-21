@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from . import classify, exchange, fail_why, gates, i18n, pi_catalog, tasks, tmpdir
+from . import classify, delivery, exchange, fail_why, gates, i18n, pi_catalog, tasks, tmpdir
 from .dispatcher_const import (
     IFACE_RETRIES,
     IFACE_WHY,
@@ -169,7 +169,7 @@ class FinishMixin:
         return True
     def _after_iface_error(self, run: dict, t: dict | None, res: RunResult) -> None:
         """模型接口连不上了（Pi 自重试失败 / 网络服务端类报错，以退出码 0 结束）：不算交回、不跑质检、不记 failed。
-        额度用完 / 被限流 / 服务端出错 / 连不上 → 这只猫出去玩了（歇着），核心自动判、自动解除；
+        额度用完 / 被限流 / 服务端出错 / 连不上 → 这只猫歇着，核心自动判、自动解除；
         卡排队等它回来（到点自动开工），接口连不上的那种复用 探测（_network_wait / network_retry_s）。
         这一轮一个工具都没调 → 卡回排队（同一张卡最多自动重来 3 次，超过进 interrupted 等首领处置）；
         调过工具（干到一半断的）→ 卡也回排队：记下这一轮的对话目录，猫歇完回来接着做（--continue 续那段对话）。"""
@@ -183,7 +183,7 @@ class FinishMixin:
         if kind == "unreachable":
             reason = "server" if classify.server_error(err) else "network"
         if reason:
-            self.rest_after_error(run["station"], err, reason)      # 这只猫出去玩了
+            self.rest_after_error(run["station"], err, reason)      # 这只猫歇着
         if (res.n_tools or 0) > 0:
             self._iface_resume(run, t, masked, reason)     # 干到一半断的：卡回排队，猫回来接着做
             return
@@ -335,14 +335,15 @@ class FinishMixin:
                 return
             self.store.event("gates_ok", i18n.t("ev.gates_ok", lg, ok=len(results), total=len(results)), t["assignee"], task_id)
         review = str(card.get("acceptance", {}).get("review", "leader"))
+        handoff = delivery.sheet(self.store, task_id, lg)
         if review == "none":
             self.store.update_task(task_id, state="accepted")
-            self._on_accept(task_id)
+            self._on_accept(task_id, handoff)
         else:
             self.store.update_task(task_id, state="reviewing")
-            self.store.event("reviewing", i18n.t("ev.reviewing", self.lang(),
-                                                  who=t["dispatcher"] if review == "leader" else review), t["assignee"], task_id,
-                             data={"who": "user" if review == "user" else "leader"})   # 首页「只看需要我处理的」按 who=user 筛
+            text = i18n.t("ev.reviewing", lg, who=t["dispatcher"] if review == "leader" else review)
+            self.store.event("reviewing", text + "\n\n" + handoff, t["assignee"], task_id,
+                             data={"who": "user" if review == "user" else "leader", "delivery": handoff})   # 首页按 who=user 筛
         self._maybe_write_idle(t["assignee"], task_id)   # 文件档：交付后交换文件改写我活（质检打回重排的话上面已重写新卡，这里会跳过）
     def _run_gates(self, t: dict) -> list:
         card = t.get("card") or {}
@@ -414,12 +415,12 @@ class FinishMixin:
         if ahead:
             return i18n.t("ack.returned_queued", lg, ahead=i18n.t("card.list_sep", lg).join(ahead))
         return i18n.t("ack.returned_wait", lg, sid=station_id)
-    def _on_accept(self, task_id: str) -> None:
+    def _on_accept(self, task_id: str, handoff: str = "") -> None:
         t = self.store.get_task(task_id)
         oa = (t.get("card") or {}).get("on_accept") or {"action": "none"}
         # M1: only 'none'; move/channel arrive in M3
         self.store.update_task(task_id, state="done", done_at=now_iso())
         self.store.event("done", i18n.t("ev.done", self.lang(),
                                         oa=i18n.t("ev.done_oa", self.lang(), a=oa.get("action")) if oa.get("action", "none") != "none" else ""),
-                         t["assignee"], task_id)
+                         t["assignee"], task_id, data={"delivery": handoff} if handoff else None)
         tmpdir.remove_card(task_id)          # 验收通过：这张卡的临时目录没用了，马上清

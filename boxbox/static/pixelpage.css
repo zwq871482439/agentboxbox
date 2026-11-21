@@ -1,0 +1,25 @@
+/* 米色卡通页（任务 / 帮手 / 能力 / 设置页共用）：和上岗像素窗口（pixelwin.css）一个调子——
+   米白底、深棕标题栏、深色粗描边、硬阴影（不模糊）、方角。页面在 <head> 里引：
+   <link rel="stylesheet" href="/static/pixelpage.css">，再给 <body> 加 class="px-page"。
+   只管外观（颜色 / 描边 / 阴影 / 圆角），不管排版：面板放哪、多宽还是各页自己定。 */
+body.px-page{background:#f6efe3;color:#2b1d12}
+.px-page .panel{background:#fbf3e1;border:3px solid #2b1d12;border-radius:0;box-shadow:6px 6px 0 rgba(0,0,0,.35);padding:0 0 12px;overflow:hidden}
+/* 面板标题栏：任务页叫 .phead，设置 / 能力页叫 .hd，details 面板用 summary */
+.px-page .panel > .phead,.px-page .panel > .hd,.px-page details.panel > summary{background:#6b4a2f;color:#fff8e7;margin:0 0 8px;
+  padding:7px 14px;border-bottom:3px solid #2b1d12}
+.px-page .panel > .phead *,.px-page .panel > .hd *{color:#fff8e7}
+.px-page .panel > :not(.phead):not(.hd):not(summary){margin-left:14px;margin-right:14px}
+/* 按钮：深棕底白字，主按钮绿色；方角 + 2px 描边 + 硬阴影 */
+.px-page .btn{background:#6b4a2f;color:#fff8e7;border:2px solid #2b1d12;border-radius:0;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
+.px-page .btn:hover{background:#7d5836}
+.px-page .btn.p,.px-page .btn.pri,.px-page .btn.on{background:#3f9b4f;color:#fff}
+.px-page .btn.danger{background:#b3402f;color:#fff}
+/* 输入框：白底深色描边，方角 */
+.px-page input[type=text],.px-page input[type=number],.px-page input[type=time],.px-page input[type=password],.px-page select,.px-page textarea{
+  background:#fff;color:#2b1d12;border:2px solid #2b1d12;border-radius:0}
+.px-page .panel > .phead select{background:#fff8e7;color:#2b1d12}
+.px-page .badge{border-radius:0;border:2px solid #2b1d12}
+/* 抽屉：米白底 + 深棕标题 */
+.px-page #drawer{background:#fbf3e1;border-left:3px solid #2b1d12;box-shadow:-6px 0 0 rgba(0,0,0,.25)}
+.px-page #drawer .dhead{background:#6b4a2f;border-bottom:3px solid #2b1d12}
+.px-page #drawer .dhead *{color:#fff8e7}

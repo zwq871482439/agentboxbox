@@ -54,13 +54,16 @@ class InterruptMixin:
         return str(config.DATA / "sessions" / str(run.get("run_id") or ""))
     def mark_crashed_runs(self) -> list[dict]:
         """核心启动时查一遍：上次还有没收尾的 run、进程也不在了 = 上次没正常退出（崩溃 / 被任务管理器结束）。
-        卡记「中断」（不是失败），下次打开能接着做。进程还在的不动：看门狗会按 pid 重新接管。"""
+        卡记「中断」（不是失败），下次打开能接着做。
+
+        只有非 Windows 才信「进程还在」：Windows 上每只猫的进程都在「盒子退出就一起杀掉」的作业对象里，
+        盒子重启后一个还活着的旧进程号只可能是被别的程序重用了，按它接管会误杀那个程序。"""
         out = []
         for run in self.store.open_runs():
             if not run.get("pid"):
                 continue        # 定时任务（路径 C）本来就没进程，等客户端来领：不是崩溃
             try:
-                if procjob.pid_alive(run.get("pid")):
+                if not procjob.IS_WIN and procjob.pid_alive(run.get("pid")):
                     continue
             except Exception:  # noqa: BLE001 - 查不到进程就当它不在了
                 pass

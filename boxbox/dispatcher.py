@@ -59,6 +59,7 @@ __all__ = [
 class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin, StallMixin):
     def __init__(self, store: Store):
         self.store = store
+        self._closing = False
         self.runners = {}
         self.handles: dict[str, RunHandle] = {}
         self.retired: dict[str, object] = {}      # 配置改了但还有在跑进程的运行器：挪这儿，老进程它管着
@@ -117,6 +118,7 @@ class Dispatcher(AssignMixin, BoardMixin, FinishMixin, InterruptMixin, RestMixin
         """核心退出：结束所有打工进程，把它们的卡记成「中断」，返回中断了几张。
         不是「做砸了」，是「被打断」——原因写「退出时中断」，对话记录留着，下次打开能接着做。
         token 照常记（finish 会把进程已经吐出来的用量交回来）。"""
+        self._closing = True
         n = 0
         for r in self.all_runners():
             try:

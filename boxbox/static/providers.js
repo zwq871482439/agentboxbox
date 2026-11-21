@@ -1,9 +1,9 @@
-/* 服务商 / 模型选择：从 /api/providers 拉 models.dev 清单，给页面两个可输入搜索的下拉。
-   单独成一个文件，因为上岗像素窗口和工位编辑浮层都要用。
+/* 模型平台 / 模型选择：从 /api/providers 拉 models.dev 清单，给页面两个可输入搜索的下拉。
+   单独成一个文件，因为上岗像素窗口和帮手编辑浮层都要用。
    用法：
      BXProviders.mount({
-       provBox: el, modelBox: el,       // 两个容器（服务商、模型）
-       provider: "kimi-code-plan-cn",   // 编辑时预选的服务商 id（可省）
+       provBox: el, modelBox: el,       // 两个容器（模型平台、模型）
+       provider: "kimi-code-plan-cn",   // 编辑时预选的模型平台 id（可省）
        model: "kimi-for-coding",        // 编辑时预选的模型 id（可省）
        onProvider: function (p) {},     // 选中清单里一家时给对象；手动填写 / 没匹配上给 null
        onModel: function (m) {}         // 选中清单里一个模型时给对象；手动填写 / 没匹配上给 null
@@ -37,11 +37,8 @@
     document.head.appendChild(s);
   }
 
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
-    });
-  }
+  /* 共用工具在 util.js 里 */
+  var esc = window.BXu.esc;
 
   function list() {
     if (!listPromise) {
@@ -53,7 +50,7 @@
     return listPromise;
   }
 
-  /* 一个可输入搜索的下拉。items() 每次现取（服务商选完模型列表会换）。 */
+  /* 一个可输入搜索的下拉。items() 每次现取（模型平台选完模型列表会换）。 */
   function combo(box, opts) {
     var input = document.createElement("input");
     input.type = "text";

@@ -1,16 +1,13 @@
 """Runner interface (§2.2). The core waits; the model never does.
 
-mode: once (A: Pi with API key; B: zcode -p / claude -p / codex exec / agent -p)
-      hold (B: a protocol process the core keeps alive)
-      scheduled (C: the client's own timer triggers a session that reads the exchange file)
+mode: once (盒子拉起进程跑完一张卡)
+      scheduled (客户端自己的定时器起会话，读交换文件领卡)
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from .. import i18n
-
-EXIT_WORDS = {0: "ok", 10: "busy", 11: "quota", 12: "unreachable", 13: "auth", 14: "route", 1: "other"}
 
 
 @dataclass

@@ -17,13 +17,17 @@ ROLE_ALIASES = {"leader": "leader", "teamleader": "leader", "team leader": "lead
 
 
 SETTINGS_INTS = {"core_port": (1, 65535), "ack_timeout_s": (1, None), "heartbeat_s": (1, None),
+                 "network_retry_s": (1, None),
                  "wake_min": (0, None), "member_feedback_max_chars": (120, 4000),
                  "stall_cmd_s": (1, None), "stall_model_s": (1, None), "stall_notool_s": (1, None),
-                 "cmd_hard_s": (1, None),
+                 "cmd_hard_s": (1, None), "tmp_keep_days": (0, 3650),
                  "log_tool_tail_chars": (0, 200000), "log_gzip_days": (0, 3650), "log_keep_days": (0, 3650)}
 
 
-SETTINGS_BOOLS = ("skipped_member", "scene_bubbles", "member_feedback", "tray_notify", "log_full")
+SETTINGS_BOOLS = ("skipped_member", "scene_bubbles", "member_feedback", "tray_notify", "log_full", "search_tools", "repo_map")
+
+
+SETTINGS_CHOICES = {"ponytail": ("off", "lite", "full")}
 
 
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -32,7 +36,7 @@ _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 COPY_DECOR = ("cost", "note")      # 配饰：单价和备注不跟着复制
 
 
-COPY_SKIP = ("id", "slot", "cwd", "cwd_from")   # 目录不直接抄，复制时另给新猫建（git worktree 或默认目录）
+COPY_SKIP = ("id", "slot", "cwd", "cwd_from", "label")   # 目录不直接抄，复制时另给新猫建（git worktree 或默认目录）；显示名不重名
 
 
 LEADER_EVENT_KINDS = ("reviewing", "failed", "interrupted", "review", "report", "post", "rest_out", "rest_back", "interrupted_handoff")

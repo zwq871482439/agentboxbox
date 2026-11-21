@@ -1,21 +1,16 @@
 """首领那边：事件行、上岗话、等着回话。"""
 from __future__ import annotations
 
-import datetime as _dt
 import json
 import re
 import threading
 import time
 
 from .. import config, connectors, fail_why, i18n
+from ..dispatcher_util import _hhmm
 from .http_const import LEADER_EVENT_KINDS, LEADER_EVENT_MAX, WAIT_DEFAULT_S, WAIT_MAX_S
 
 
-def _hhmm(ts) -> str:
-    try:
-        return _dt.datetime.fromisoformat(str(ts)).strftime("%H:%M")
-    except (TypeError, ValueError):
-        return ""
 def _event_line(d, ev: dict, leader: str) -> str:
     """一条事件 → 给首领看的一行：工位 时间 出了什么 卡号（标题）。
     只写这些：不带回报正文、不带任何 key。按这个首领自己的语言出（英文上岗的拿英文）。"""
@@ -100,7 +95,7 @@ def _is_accepted(data: dict, text: str) -> bool:
         return v == "accept"
     return "验收通过" in text or "approved" in text
 def _rest_word(data: dict, lg: str) -> str:
-    """歇着那句「出去玩了…」：按事件里记的原因和回来的时间，用这个首领的语言重说一遍。"""
+    """歇着那句「歇着：…」：按事件里记的原因和回来的时间，用这个首领的语言重说一遍。"""
     reason = str(data.get("reason") or "")
     hint = str(data.get("hint") or "")
     why = i18n.t("rest.reason." + reason, lg) if reason else ""

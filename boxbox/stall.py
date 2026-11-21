@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import time
 
 from . import config, i18n, procjob
+from .dispatcher_util import _elapsed
 
 PROGRESS_COLS = ("last_tool", "last_tool_at", "last_tool_cmd", "last_tool_out",
                  "last_output_at", "last_model_at", "last_tool_end_at", "tool_open")
@@ -21,6 +23,11 @@ RUN_VIEW_KEYS = ("run_id", "attempt", "runner", "pid", "started", "ended", "exit
 _OPEN = ("1", "true", "True")
 _KINDS = ("quiet", "model", "notool")
 _CMD_KEYS = ("command", "cmd", "path", "file_path")
+
+# 待办每 5 秒重算一遍，每张可能卡住的卡都要问一次子进程，一次就是一个 PowerShell；
+# 同一个 run 60 秒内用上次的就够了。键带上 started：测试里不同库会用同样的 run_id
+_KIDS_TTL_S = 60.0
+_kids_cache: dict[tuple[str, str], tuple[float, list]] = {}
 
 
 def limits() -> dict:
@@ -80,22 +87,22 @@ def judge(run: dict, now: _dt.datetime | None = None) -> dict | None:
     if str(run.get("tool_open") or "") in _OPEN:
         start = str(run.get("last_tool_at") or started)
         out_at = str(run.get("last_output_at") or start)
-        age_hard = _age(start, now)
+        age_hard = _elapsed(start, now)
         if age_hard is not None and age_hard >= lim["hard"]:
             return {"kind": "hard", "since": start, "age_s": age_hard, "kill": True}
-        age_q = _age(out_at, now)
+        age_q = _elapsed(out_at, now)
         if age_q is not None and age_q >= lim["quiet"]:
             return {"kind": "quiet", "since": out_at, "age_s": age_q, "kill": False}
         return None
     model_since = _latest(run.get("last_model_at"), run.get("last_tool_end_at"), started)
-    age_m = _age(model_since, now)
+    age_m = _elapsed(model_since, now)
     if model_since and age_m is not None and age_m >= lim["model"]:
         return {"kind": "model", "since": model_since, "age_s": age_m, "kill": False}
     if not run.get("last_model_at"):
         return None
-    spoke = _age(str(run.get("last_model_at")), now)
+    spoke = _elapsed(str(run.get("last_model_at")), now)
     spin_since = _latest(run.get("last_tool_end_at"), run.get("last_tool_at"), started)
-    age_spin = _age(spin_since, now)
+    age_spin = _elapsed(spin_since, now)
     if spoke is not None and spoke < lim["model"] and spin_since and age_spin is not None and age_spin >= lim["notool"]:
         return {"kind": "notool", "since": spin_since, "age_s": age_spin, "kill": False}
     return None
@@ -132,7 +139,7 @@ def explain(run: dict, lang: str) -> str:
     cmd = str(run.get("last_tool_cmd") or "—")
     head = i18n.t("stall." + kind, lang, dur=dur, cmd=cmd) if kind in _KINDS else kind
     recent = i18n.t("stall.recent", lang, tool=str(run.get("last_tool") or "—"),
-                    at=_hhmm(str(run.get("last_tool_at") or "")), cmd=cmd,
+                    at=_stamp_hhmm(str(run.get("last_tool_at") or "")), cmd=cmd,
                     line=str(run.get("last_tool_out") or "—"))
     return i18n.t("stall.report", lang, head=head, recent=recent, kids=_kids(run, lang))
 
@@ -169,17 +176,32 @@ def human_dur(seconds, lang: str) -> str:
 
 def _dur_since(iso: str, lang: str) -> str:
     now = _dt.datetime.now().astimezone()
-    age = _age(iso, now)
+    age = _elapsed(iso, now)
     return human_dur(0 if age is None else max(0, age), lang)
 
 
 def _kids(run: dict, lang: str) -> str:
-    rows = procjob.children(run.get("pid"))
+    rows = _kids_rows(run)
     if not rows:
         return i18n.t("stall.no_kids", lang)
     bits = [i18n.t("stall.kid", lang, name=row.get("name") or "?", cmd=str(row.get("cmd") or "")[:100],
                    age=human_dur(row.get("age_s") or 0, lang)) for row in rows[:5]]
     return i18n.t("stall.kids", lang, kids=i18n.t("stall.kid_sep", lang).join(bits))
+
+
+def _kids_rows(run: dict) -> list:
+    """底下还活着的子进程，同一个 run 60 秒内用缓存。"""
+    key = (str(run.get("run_id") or ""), str(run.get("started") or ""))
+    now = time.monotonic()
+    hit = _kids_cache.get(key)
+    if hit and now - hit[0] < _KIDS_TTL_S:
+        return hit[1]
+    # 看板、待办、看门狗三个线程都会进这里：先拍快照再删，别的线程同时插入或删掉同一个键都不炸
+    for k in [k for k, v in list(_kids_cache.items()) if now - v[0] >= _KIDS_TTL_S]:
+        _kids_cache.pop(k, None)
+    rows = procjob.children(run.get("pid"))
+    _kids_cache[key] = (now, rows)
+    return rows
 
 
 def _message_end(st: dict, message, now: str) -> None:
@@ -258,18 +280,6 @@ def _text(obj) -> str:
     return ""
 
 
-def _age(iso, now: _dt.datetime) -> float | None:
-    if not iso:
-        return None
-    try:
-        start = _dt.datetime.fromisoformat(str(iso))
-    except ValueError:
-        return None
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=now.tzinfo)
-    return (now - start).total_seconds()
-
-
 def _latest(*isos) -> str:
     best = ""
     for raw in isos:
@@ -279,7 +289,7 @@ def _latest(*isos) -> str:
     return best
 
 
-def _hhmm(iso: str) -> str:
+def _stamp_hhmm(iso: str) -> str:
     if "T" in iso and len(iso) >= 16:
         return iso[11:16]
     return iso or "—"

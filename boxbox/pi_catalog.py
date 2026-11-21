@@ -131,10 +131,7 @@ def load(timeout_s: float = 30.0) -> list[dict]:
         _MEM.update(key=key, models=models)
         try:
             f = _cache_file()
-            f.parent.mkdir(parents=True, exist_ok=True)
-            tmp = f.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps({"key": key, "models": models}, ensure_ascii=False), encoding="utf-8")
-            os.replace(tmp, f)
+            config._write_json(f, {"key": key, "models": models}, indent=None)
         except OSError:
             pass
         return models
@@ -214,17 +211,18 @@ def apply_heal(station_id: str, text: str) -> str | None:
     if fix is None:
         return None
     field, label = fix
-    items = config.stations()
-    for st in items:
-        if st.get("id") != station_id or not isinstance(st.get("pi"), dict):
-            continue
-        compat = dict(st["pi"].get("compat") or {})
-        if compat.get(field) is True:
-            return None
-        compat[field] = True
-        st["pi"] = dict(st["pi"], compat=compat)
-        config.save_stations(items)
-        return label
+    with config._WRITE_LOCK:   # 读改写工位的三步要原子，不然和同时来的存工位请求丢一边
+        items = config.stations()
+        for st in items:
+            if st.get("id") != station_id or not isinstance(st.get("pi"), dict):
+                continue
+            compat = dict(st["pi"].get("compat") or {})
+            if compat.get(field) is True:
+                return None
+            compat[field] = True
+            st["pi"] = dict(st["pi"], compat=compat)
+            config.save_stations(items)
+            return label
     return None
 
 

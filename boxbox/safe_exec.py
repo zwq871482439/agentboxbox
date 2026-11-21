@@ -64,7 +64,7 @@ def resolve_argv(argv: list, values: dict, cwd: str, allowed_args: dict | None =
                 raise RejectedArgv(i18n.t("safe.task_id"))
             out.append(v)
         elif name == "cwd":
-            out.append(str(values.get("cwd") or cwd))
+            out.append(str(cwd))   # 只用真实工作目录：卡上的 args 不能顶掉它（免得拿来拼 --basetemp 之类）
         elif name == "path":
             if values.get("path") is None:
                 raise RejectedArgv(i18n.t("safe.need_path"))
@@ -88,7 +88,7 @@ def run_argv(argv: list, cwd: str, timeout_s: int = 120) -> dict:
     try:
         p = subprocess.run(args, cwd=str(cwd), shell=False,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           timeout=timeout_s, env=env)
+                           timeout=timeout_s, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return {"exit": p.returncode,
                 "stdout": p.stdout.decode("utf-8", "replace")[:MAX_OUT_CHARS],
                 "stderr": p.stderr.decode("utf-8", "replace")[:MAX_OUT_CHARS],

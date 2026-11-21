@@ -10,10 +10,25 @@ from .store import now_iso
 
 _NUDGE_CARDS = 5
 
+# 命令还开着（stall.py 的 _OPEN 同一套真值）
+_TOOL_OPEN = ("1", "true", "True")
+_CMD_TOOLS = ("bash", "shell", "sh", "exec")
+_EDIT_TOOLS = ("edit", "write", "apply")
+
+
+def _clip_what(text) -> str:
+    """最近一次工具调用的参数压成一行，只留开头：一句话状态里放不下整条命令。"""
+    return " ".join(str(text or "").split())[:60]
+
 
 def _clip_title(title) -> str:
     """标题里的换行会把这一行拆开，看起来像另一张卡。"""
     return " ".join(str(title or "").split())[:30]
+
+
+def _mins_text(seconds) -> str:
+    """秒说成分钟（取整）。简报里那句要能一眼看懂，不写小数。"""
+    return str(int(round(float(seconds) / 60.0)))
 
 
 def _pending_lines(items: list[dict], lg: str) -> str:
@@ -132,9 +147,10 @@ def _quota_line(store, st: dict, lg: str) -> str:
 
 
 def _board_line(b: dict) -> str:
-    """简报里的一行，用的就是看板这一条上的字段。"""
-    parts = [str(b.get("id") or ""), str(b.get("word") or "")]
-    word = parts[1]
+    """简报里的一行：那句大白话状态顶在前面，后面跟挑猫要用的字段。"""
+    status = str(b.get("status_line") or "").strip()
+    word = status or str(b.get("word") or "")
+    parts = [str(b.get("label") or "") or str(b.get("id") or ""), word]   # 有显示名用显示名，后面括号里不再跟 id
     for key in ("how", "model", "quota"):
         val = str(b.get(key) or "").strip()
         if val:
@@ -194,6 +210,7 @@ class BoardMixin:
             life = lifetimes.get(st["id"]) or {}
             mine = open_by_station.get(st["id"], [])
             cur = next((t for t in mine if t["state"] in ("dispatched", "running")), None)   # 排队的不算「在跑」
+            done = next((t for t in mine if t["state"] in ("delivered", "reviewing")), None)   # 做完了在等确认的那张
             queued_n = sum(1 for t in mine if t["state"] == "queued")          # 后面还排着几张
             queue_texts = [self.queue_text(t) for t in mine if t["state"] == "queued"]   # 排队写清楚等谁
             scheduled = st.get("runner") == "scheduled"
@@ -221,7 +238,7 @@ class BoardMixin:
                         else i18n.t("board.word.off", lg)
                     code = "off_queue" if queued_n else "off"
                 elif rest:
-                    # 歇着：出去玩了，预计 01:54 回来（额度用完）
+                    # 歇着：额度用完，预计 01:54 回来
                     word, code = self.rest_word(rest, lg), "rest"
                 elif running:
                     word, code = self._work_word(lg, str((cur or {}).get("dispatcher") or ""), 0)
@@ -253,11 +270,15 @@ class BoardMixin:
                 client = clients.get(st["id"]) or ""
             else:
                 client = st.get("client")
-            rows.append({"id": st["id"], "role": st.get("role"), "client": client,
+            rows.append({"id": st["id"], "label": str(st.get("label") or "").strip(),
+                         "role": st.get("role"), "client": client,
                          "client_label": mcp_client.label(client, lg),
                          "runner": st.get("runner"),
                          "slot": st.get("slot"), "enabled": st.get("enabled", True), "word": word,
                          "word_code": code,
+                         # 一句大白话状态（在改什么 / 在跑什么 / 等确认 / 歇着 / 闲着）：看板、首领回话、办公室同一句
+                         "status_line": self.status_line(st["id"], code, word, cur, done,
+                                                          open_runs.get(st["id"]), rest, queued_n, lg),
                          "task_id": cur["id"] if cur else None,
                          "title": cur["title"] if cur else None,
                          "working_for": (cur.get("dispatcher") if cur else None) or None,
@@ -268,7 +289,7 @@ class BoardMixin:
                          # 排队写清楚等谁（看板 / 首领待办 / 卡详情 / 办公室同一句）
                          "queue_text": queue_texts[0] if queue_texts else "",
                          "queue_texts": queue_texts,
-                         # 歇着：出去玩了，预计 01:54 回来（额度用完）；办公室画布拿去画小钟
+                         # 歇着：额度用完，预计 01:54 回来；办公室画布拿去画小钟
                          "rest": ({"reason": rest.get("reason"),
                                    "reason_text": i18n.t("rest.reason." + str(rest.get("reason") or ""), lg)
                                    if str(rest.get("reason") or "") in REST_REASONS else rest.get("reason_text"),
@@ -299,6 +320,50 @@ class BoardMixin:
         if many:
             return i18n.t("board.word.running_for", lg, who=who), "running"
         return i18n.t("board.word.running", lg), "running"
+    def status_line(self, sid: str, code: str, word: str, cur: dict | None, done: dict | None,
+                    run: dict | None, rest: dict | None, queued_n: int, lg: str) -> str:
+        """每只猫一句大白话：现在在干嘛。看板那一行、给首领的看板文字、办公室画布都用这一句，
+        不再各自拼（符号是符号、状态词是状态词、回话又是另一套，对不上）。"""
+        if code in ("running", "running_queue"):
+            line = self._doing_line(cur, run, lg)
+            if code == "running_queue":
+                line += i18n.t("board.status.qsuffix", lg, n=queued_n)
+            return line
+        if code == "stuck":
+            return word   # 卡住由状态词报，一句话里不再重复一遍
+        if code == "rest":
+            reason = str((rest or {}).get("reason") or "")
+            why = i18n.t("rest.reason." + reason, lg) if reason in REST_REASONS else \
+                str((rest or {}).get("reason_text") or reason or "")
+            return i18n.t("board.status.rest", lg, why=why,
+                          when=self.rest_when((rest or {}).get("hint") or "", lg))
+        if code == "config":
+            why = _clip_what((self.config_of(sid) or {}).get("why"))
+            return i18n.t("board.status.config", lg, why=why) if why else word
+        if done:
+            return i18n.t("board.status.done", lg)
+        if code == "idle":
+            return i18n.t("board.status.idle", lg)
+        return word
+    def _doing_line(self, cur: dict | None, run: dict | None, lg: str) -> str:
+        """在跑的那句：照最近一次工具调用说在读什么 / 改什么 / 跑什么命令。
+        会话模式没有这一层，就写在做哪张任务。不另起进程，只读盒子已经记下的那笔。"""
+        tool = str((run or {}).get("last_tool") or "").strip().lower()
+        what = _clip_what((run or {}).get("last_tool_cmd"))
+        if not what:
+            title = _clip_title((cur or {}).get("title"))
+            return i18n.t("board.status.working", lg, title=title) if title \
+                else i18n.t("board.status.working_plain", lg)
+        if tool in _EDIT_TOOLS:
+            return i18n.t("board.status.edit", lg, what=what)
+        if tool in _CMD_TOOLS:
+            if str((run or {}).get("tool_open") or "") in _TOOL_OPEN:
+                mins = int(_mins_since((run or {}).get("last_tool_at")))
+                dur = i18n.t("board.status.dur_min", lg, n=mins) if mins >= 1 \
+                    else i18n.t("board.status.dur_now", lg)
+                return i18n.t("board.status.cmd", lg, cmd=what, dur=dur)
+            return i18n.t("board.status.ran", lg, cmd=what)
+        return i18n.t("board.status.read", lg, what=what)
     def todo(self, for_leader: str | None = None) -> dict:
         """首领的待办，按谁在等排序。每条带 who：
         leader = 首领和工位之间的事（验收、卡住、打回待定、失败、没开工），用户不用管；
@@ -313,12 +378,9 @@ class BoardMixin:
             return "user" if rv == "user" else "leader"
 
         # 每个工位最新一张卡的 created_at：失败 / 中断是不是「最新还没处理的那张」看它，
-        # 更早的失败只留在待办里，不影响猫的样子（latest=False）
-        latest_at: dict[str, str] = {}
-        for t in self.store.list_tasks(limit=500):
-            sid, ca = t["assignee"], (t.get("created_at") or "")
-            if ca > latest_at.get(sid, ""):
-                latest_at[sid] = ca
+        # 更早的失败只留在待办里，不影响猫的样子（latest=False）。
+        # 聚合出来，不把全部卡读出来（待办每 5 秒跟着办公室走一遍，任务多了不能变慢）
+        latest_at = self.store.latest_task_at()
 
         def _keep(t: dict) -> bool:
             # 待办只给派这张卡的首领；没传 for_leader（看板 / 提醒）就全给
@@ -412,5 +474,21 @@ class BoardMixin:
         text = tasks.render(tpl, station=station_id, role=role, task_id="", card="",
                             cwd=st.get("cwd") or "", report_path="", returned_reason="", round="", tools=tools, board=board_txt,
                             tmp_dir=str(tmpdir.root()))   # 没卡的时候给 tmp 根目录（具体卡目录随卡一起给）
+        if role == "leader":
+            hint = self._review_wait_hint(station_id, lg)
+            if hint:
+                text += "\n" + hint
         return {"station": station_id, "role": role, "tools": tools.split(", "), "text": text, "board": rows,
                 "todo": self.todo(station_id) if role == "leader" else None}
+    def _review_wait_hint(self, station_id: str, lg: str) -> str:
+        """首领确认慢到干活的两倍：瓶颈在首领这边，说一句。"""
+        from . import efficiency
+        try:
+            doc = efficiency.report(self.store, days=7, dispatcher=station_id)
+        except Exception:  # noqa: BLE001 - 简报不能因为统计失败就出不来
+            return ""
+        t = doc.get("timing") or {}
+        wait, work = t.get("wait_review_s"), t.get("work_s")
+        if wait is None or work is None or work <= 0 or wait < 2 * work:
+            return ""
+        return i18n.t("brief.review_wait", lg, wait=_mins_text(wait), work=_mins_text(work))

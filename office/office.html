@@ -49,9 +49,9 @@ body{
 .list table{width:100%;border-collapse:collapse}.list td{padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px}
 .list td.n{font-weight:700;white-space:nowrap}.list td.t{color:var(--dim)}
 .foot{color:var(--dim2);font-size:11.5px;margin-top:6px}
-/* 提醒条只放第 1 级「要你处理」：左上角贴着最上沿，一条一行（长了省略）、最多 3 行，宽不超过画布约三成，字和「自动 / 白天 / 夜晚」按钮一样大；像素风：方角 + 硬阴影 */
+/* 提醒条只放第 1 级「要你处理」：左上角「动态 / 用量」按钮下面，一条一行（长了省略）、最多 3 行，宽不超过画布约三成，字和「自动 / 白天 / 夜晚」按钮一样大；像素风：方角 + 硬阴影 */
 .alertbar{
- position:absolute;top:4px;left:1%;max-width:29%;z-index:6;background:#fffdf7;color:#2b2233;border:2px solid #2b2233;border-radius:0;
+ position:absolute;top:11%;left:1%;max-width:29%;z-index:6;background:#fffdf7;color:#2b2233;border:2px solid #2b2233;border-radius:0;
  box-shadow:3px 3px 0 rgba(0,0,0,.45)padding:4px 8px;font-size:12.5px;line-height:1.55;
 }
 
@@ -84,18 +84,18 @@ body{
 .party-pop canvas{width:16px;height:16px;image-rendering:pixelated;flex:none}
 /* 昼夜开关点开的五档菜单（自动 / 清晨 / 白天 / 傍晚 / 夜晚）：样式照聚会菜单那套，挂在 #stage 里跟着画布定位 */
 .theme-pop{
- position:absolute;z-index:7;min-width:116px;background:#fbf3e1;border:2px solid #2b1d12;box-shadow:3px 3px 0 rgba(0,0,0,.45);padding:3px;display:flex;
- flex-direction:column
+ position:absolute;z-index:7;background:#fbf3e1;border:2px solid #2b1d12;box-shadow:3px 3px 0 rgba(0,0,0,.45);padding:3px;display:flex;
+ flex-direction:row;gap:2px;align-items:stretch
 }
 
 .theme-pop button{
- display:flex;align-items:center;gap:7px;background:transparent;border:0;border-radius:0;color:#2b1d12;padding:4px 12px 4px 6px;font:inherit;font-size:12.5px;
- cursor:pointertext-align:left;white-space:nowrap;
+ display:flex;align-items:center;gap:5px;background:transparent;border:0;border-radius:0;color:#2b1d12;padding:4px 7px 4px 5px;font:inherit;font-size:12.5px;
+ cursor:pointer;text-align:left;white-space:nowrap;
 }
 
 .theme-pop button:hover{background:#f3e7c9}
 .theme-pop button.on{background:#e8e3d6;font-weight:600}
-.theme-pop canvas{width:14px;height:14px;image-rendering:pixelated;flex:none}
+.theme-pop canvas{width:12px;height:12px;image-rendering:pixelated;flex:none}
 [hidden]{display:none!important}   /* 自带 display:flex 的元素（聚会菜单等）也要听 hidden：不写这条，菜单一打开页面就是展开的 */
 .drawer-alert{
  border:2px solid #2b2233;background:#fffdf7;color:#2b2233;box-shadow:3px 3px 0 rgba(0,0,0,.45);padding:6px 9px;font-size:12.5px;margin-bottom:10px;
@@ -154,7 +154,7 @@ body{
  <div class="foot" data-t="top.foot">点猫看详情。猫猫是原创像素画。</div>
 </div>
 
-<script type="application/json" id="sample-inline">{"schema": "boxbox.office/1", "fetched": "2026-10-19T23:42:00+08:00", "_note": "字段名沿用 dashboard.py 的 /api/stations，/api/metrics，/api/cards，/api/quota，/api/arch，/api/merge；数字取自一次真实快照，任务描述是虚构的示例", "strip": {"calls_today": 188, "ok_pct": 91.7, "running": 2, "total": 5}, "arch": {"count": 4, "summary": "待办 4：没回的问题 1，球在你的 PR/issue 0，可派工位 0，派了没开工 3"}, "channels": [{"id": "架构师", "role": "lead", "label": "TeamLeader", "name": "Opus", "model": "Cursor（本机）", "channel": "Cursor 本机", "route": "cursor", "state": "you", "state_word": "需要用户决策", "state_sub": "等你拍板", "quota_used_pct": 98, "quota_left_pct": 2, "quota_slot": "月", "quota_source": "手动", "quota_reset": "11-01 重置", "task_d": "给 B 写任务单：整理接口文档", "queue": 0, "queue_items": [], "last": "16 秒前", "tok": {"na": "Cursor 没有用量接口"}, "skin": {"cat": 1}}, {"id": "A", "label": "Team Member A", "name": "Kimi K3", "model": "Kimi K3", "channel": "Pi 脚本", "route": "pi-wake", "accent": "#5aa9ff", "state": "run", "state_word": "进行中", "state_sub": "Pi，PR", "quota_used_pct": 10, "quota_left_pct": 90, "quota_slot": "5小时", "quota_source": "实时", "quota_reset": "2026-10-19T23:42:37+08:00", "task_d": "写单元测试（第 1 批）", "tool": "bash: pytest -q（第 45 次，63 秒前）", "queue": 0, "queue_items": [], "last": "0 秒前", "tok": {"today": {"in": 32547, "out": 8689, "cr": 592128, "calls": 4, "hit": 94.8}}, "skin": {"cat": 2}}, {"id": "B", "label": "Team Member B", "name": "GLM-5.3", "model": "智谱 GLM-5.3", "channel": "zcode 信箱", "route": "zcode-mailbox", "accent": "#a78bfa", "state": "arch", "state_word": "等待TeamLeader", "state_sub": "1 件未开始，等待TeamLeader派活或唤醒", "quota_used_pct": 24, "quota_left_pct": 76, "quota_slot": "周", "quota_source": "实时", "quota_reset": "2026-10-25T02:43:40+08:00", "task_d": "整理接口文档（已派，未开始）", "queue": 1, "queue_items": ["整理接口文档（已派，未开始）"], "last": "61 秒前", "tok": {"na": "zcode 日志里的用量字段是打码的，读不到数字"}, "skin": {"cat": 4}}, {"id": "C", "label": "Team Member C", "name": "MiniMax M3", "model": "MiniMax M3", "channel": "Pi 脚本", "route": "pi-wake", "accent": "#ff9f43", "state": "idle", "state_word": "空闲", "state_sub": "空闲 6 分钟，可派活", "quota_used_pct": 1, "quota_left_pct": 99, "quota_slot": "5小时", "quota_source": "实时", "quota_reset": "2026-10-20T00:00:00+08:00", "task_d": "—", "queue": 0, "queue_items": [], "last": "6 分前", "tok": {"today": {"in": 33695, "out": 7981, "cr": 540498, "calls": 5, "hit": 94.1}}, "skin": {"cat": 5}}], "background": [{"id": "background", "label": "后台任务", "name": "合并脚本", "state": "run", "state_word": "进行中", "task_d": "#12 七步检查，8 通过 / 0 失败", "heartbeat": "36 秒前", "queue": 1}]}</script>
+<script type="application/json" id="sample-inline">{"schema": "boxbox.office/1", "fetched": "2026-10-19T23:42:00+08:00", "_note": "字段名沿用 dashboard.py 的 /api/stations，/api/metrics，/api/cards，/api/quota，/api/arch，/api/merge；数字取自一次真实快照，任务描述是虚构的示例", "strip": {"calls_today": 188, "ok_pct": 91.7, "running": 2, "total": 5}, "arch": {"count": 4, "summary": "待办 4：没回的问题 1，球在你的 PR/issue 0，可派工位 0，派了没开工 3"}, "channels": [{"id": "架构师", "role": "lead", "label": "TeamLeader", "name": "Opus", "model": "Cursor（本机）", "channel": "Cursor 本机", "route": "cursor", "state": "you", "state_word": "需要用户决策", "state_sub": "等你拍板", "quota_used_pct": 98, "quota_left_pct": 2, "quota_slot": "月", "quota_source": "手动", "quota_reset": "11-01 重置", "task_d": "给 B 写任务单：整理接口文档", "queue": 0, "queue_items": [], "last": "16 秒前", "tok": {"na": "Cursor 没有用量接口"}, "skin": {"cat": 1}}, {"id": "A", "label": "Team Member A", "name": "Kimi K3", "model": "Kimi K3", "channel": "Pi 脚本", "route": "pi-wake", "accent": "#5aa9ff", "state": "run", "state_word": "进行中", "state_sub": "Pi，PR", "quota_used_pct": 10, "quota_left_pct": 90, "quota_slot": "5小时", "quota_source": "实时", "quota_reset": "2026-10-19T23:42:37+08:00", "task_d": "写单元测试（第 1 批）", "tool": "bash: pytest -q（第 45 次，63 秒前）", "queue": 0, "queue_items": [], "last": "0 秒前", "tok": {"today": {"in": 32547, "out": 8689, "cr": 592128, "calls": 4, "hit": 94.8}}, "skin": {"cat": 2}}, {"id": "B", "label": "Team Member B", "name": "GLM-5.3", "model": "智谱 GLM-5.3", "channel": "zcode 信箱", "route": "zcode-mailbox", "accent": "#a78bfa", "state": "arch", "state_word": "等待TeamLeader", "state_sub": "1 件未开始，等待TeamLeader派活或唤醒", "quota_used_pct": 24, "quota_left_pct": 76, "quota_slot": "周", "quota_source": "实时", "quota_reset": "2026-10-25T02:43:40+08:00", "task_d": "整理接口文档（已派，未开始）", "queue": 1, "queue_items": ["整理接口文档（已派，未开始）"], "last": "61 秒前", "tok": {"na": "zcode 日志里的用量字段是打码的，读不到数字"}, "skin": {"cat": 4}}, {"id": "C", "label": "Team Member C", "name": "MiniMax M3", "model": "MiniMax M3", "channel": "Pi 脚本", "route": "pi-wake", "accent": "#ff9f43", "state": "idle", "state_word": "空闲", "state_sub": "空闲 6 分钟，可派活", "quota_used_pct": 1, "quota_left_pct": 99, "quota_slot": "5小时", "quota_source": "实时", "quota_reset": "2026-10-20T00:00:00+08:00", "task_d": "—", "queue": 0, "queue_items": [], "last": "6 分前", "tok": {"today": {"in": 33695, "out": 7981, "cr": 540498, "calls": 5, "hit": 94.1}}, "skin": {"cat": 5}}]}</script>
 <script>
 "use strict";
 /* ==== 像素立绘 / 调色板（由 build.py 从 art/ 数据文件生成，别手改） ==== */
@@ -273,20 +273,19 @@ const I18N_ZH={
 "board.todo":"待办 {n}",
 "meet.assigning":"派活中","meet.reviewing":"验收中",
 "q.off":"已停用","q.noData":"无数据","q.left":"剩余 {n}%","q.yourCall":"需要你拍板",
-"q.merging":"{n} 合入中","q.offline":"离线","q.idle":"空闲",
 "p.todoTitle":"首领待办 {n}","p.from":"从 {t}","p.source":"，来源 {s}",
 "p.sep":"，","p.paren":"（{v}）","p.paren2":"{a}，{b}",
-"p.notReady":"明细还没算出来（等下一次刷新）","p.noTodo":"没有待办",
+"p.notReady":"明细还没算出来，等下一次刷新","p.noTodo":"没有待办",
 "p.howTo":"点标题去看板：通过、打回、再派一次、撤掉都在那儿",
-"p.bgNote":"不是模型通道，只看日志 / 心跳","p.state":"状态","p.current":"当前",
-"p.heartbeat":"心跳","p.queue":"排队","p.queueN":"{n} 件","p.tool":"工具","p.task":"当前任务",
-"p.quota":"剩余额度","p.token":"token","p.last":"最近活动","p.calls":"{n} 次调用",
+"p.state":"状态",
+"p.queue":"排队","p.queueN":"{n} 件","p.tool":"工具","p.task":"当前任务",
+"p.quota":"剩余额度","p.token":"用量","p.last":"最近活动","p.calls":"{n} 次调用",
 "p.noData":"无数据","p.left":"剩余 <b>{n}%</b>（已用 {u}%，{slot}，{src}）",
 "p.tokenIn":"输入 {a}，输出 {b}，缓存读 {c}","p.hit":"命中率 <b>{n}%</b>",
+"lv.title":"最近的动作","lv.read":"读","lv.edit":"改","lv.bash":"跑命令","lv.think":"在想",
 "t.noData":"无数据","t.left":"剩余 {n}%",
 "d.sample":"数据：sample.json","d.builtin":"数据：内置样例","d.office":"数据：/api/office",
-"d.live":"数据：实时接口","d.month":"月","d.leader":"首领","d.bgTask":"后台任务",
-"d.mergeScript":"合并脚本","d.offline":"离线","d.idle":"空闲","d.ago":"{n} 秒前",
+"d.leader":"首领",
 "party.celebrate":"庆祝中","party.wrapup":"收工会中","party.postmortem":"复盘中",
 "demo.running":"进行中","demo.bug":"#491 修一个小 bug","demo.test":"写单元测试",
 "demo.minutes":"整理会议纪要","demo.analysis":"跑一遍数据分析","demo.ppt":"做 3 页 PPT 草稿",
@@ -294,7 +293,7 @@ const I18N_ZH={
 "demo.model":"通义 Qwen","demo.doubao":"豆包","demo.hunyuan":"混元","demo.step":"阶跃",
 "demo.piScript":"Pi 脚本","demo.memberLabel":"打工猫 {id}",
 "top.brand":"猫猫盒子","top.calls":"今日调用","top.okRate":"成功率","top.running":"进行中",
-"top.youDecide":"需要用户决策","top.themeTitle":"自动：跟本机时间走（时间点在设置页改）；白天 / 夜晚：固定住，存在本机",
+"top.youDecide":"需要用户决策","top.themeTitle":"自动：跟本机时间走，时间点在设置页改；白天 / 夜晚：固定住，存在本机",
 "top.channel":"模型通道","top.list":"列表","top.office":"办公室",
 "top.foot":"点猫看详情。猫猫是原创像素画。",
 "theme.auto":"自动","theme.dawn":"清晨","theme.day":"白天","theme.dusk":"傍晚","theme.night":"夜晚",
@@ -327,12 +326,8 @@ const I18N_ZH={
 "smp.last.0":"0 秒前",
 "smp.last.61":"61 秒前",
 "smp.last.6m":"6 分前",
-"smp.last.36":"36 秒前",
-"smp.tok.cursor":"Cursor 没有用量接口",
+"smp.tok.cursor":"Cursor 的用量查不到",
 "smp.tok.zcode":"zcode 日志里的用量字段是打码的，读不到数字",
-"smp.bg.label":"后台任务",
-"smp.bg.name":"合并脚本",
-"smp.bg.task":"#12 七步检查，8 通过 / 0 失败",
 "smp.arch":"待办 4：没回的问题 1，球在你的 PR/issue 0，可派工位 0，派了没开工 3",
 };
 const I18N_EN={
@@ -353,20 +348,19 @@ const I18N_EN={
 "board.todo":"To-do {n}",
 "meet.assigning":"Assigning","meet.reviewing":"Reviewing",
 "q.off":"Off","q.noData":"No data","q.left":"{n}% left","q.yourCall":"Needs your call",
-"q.merging":"{n} merging","q.offline":"Offline","q.idle":"Idle",
 "p.todoTitle":"Leader to-do {n}","p.from":"from {t}","p.source":", source {s}",
 "p.sep":", ","p.paren":"({v})","p.paren2":"{a}, {b}",
-"p.notReady":"Details not computed yet (wait for the next refresh)","p.noTodo":"Nothing to do",
+"p.notReady":"Details not computed yet, they come with the next refresh","p.noTodo":"Nothing to do",
 "p.howTo":"Click a title to open the board: accept, send back, try again or drop it there",
-"p.bgNote":"Not an app, logs and heartbeat only","p.state":"Status","p.current":"Now",
-"p.heartbeat":"Heartbeat","p.queue":"Queue","p.queueN":"{n} items","p.tool":"Tool","p.task":"Current task",
-"p.quota":"Quota left","p.token":"token","p.last":"Last activity","p.calls":"{n} calls",
+"p.state":"Status",
+"p.queue":"Queue","p.queueN":"{n} items","p.tool":"Tool","p.task":"Current task",
+"p.quota":"Quota left","p.token":"Usage","p.last":"Last activity","p.calls":"{n} calls",
 "p.noData":"No data","p.left":"<b>{n}%</b> left ({u}% used, {slot}, {src})",
 "p.tokenIn":"In {a}, out {b}, cache read {c}","p.hit":"hit rate <b>{n}%</b>",
+"lv.title":"Recent actions","lv.read":"Reading","lv.edit":"Editing","lv.bash":"Running","lv.think":"Thinking",
 "t.noData":"No data","t.left":"{n}% left",
 "d.sample":"Data: sample.json","d.builtin":"Data: built-in sample","d.office":"Data: /api/office",
-"d.live":"Data: live API","d.month":"month","d.leader":"leader","d.bgTask":"Background task",
-"d.mergeScript":"Merge script","d.offline":"Offline","d.idle":"Idle","d.ago":"{n}s ago",
+"d.leader":"leader",
 "party.celebrate":"Celebrating","party.wrapup":"Wrapping up","party.postmortem":"Post-mortem",
 "demo.running":"Working","demo.bug":"#491 fix a small bug","demo.test":"Write unit tests",
 "demo.minutes":"Write up the meeting notes","demo.analysis":"Run the data analysis",
@@ -375,7 +369,7 @@ const I18N_EN={
 "demo.hunyuan":"Hunyuan","demo.step":"Step","demo.piScript":"Pi script","demo.memberLabel":"Worker cat {id}",
 "top.brand":"agentboxbox","top.calls":"Calls today","top.okRate":"Success rate","top.running":"Working",
 "top.youDecide":"Needs your call",
-"top.themeTitle":"Auto: follows the clock on this computer (change the times on the settings page); Day / Night: fixed, kept on this computer",
+"top.themeTitle":"Auto: follows the clock on this computer, change the times on the settings page; Day / Night: fixed, kept on this computer",
 "top.channel":"App","top.list":"List","top.office":"Office",
 "top.foot":"Click a cat to see the details. The cats are original pixel art.",
 "theme.auto":"Auto","theme.dawn":"Dawn","theme.day":"Day","theme.dusk":"Dusk","theme.night":"Night",
@@ -408,12 +402,8 @@ const I18N_EN={
 "smp.last.0":"0s ago",
 "smp.last.61":"61s ago",
 "smp.last.6m":"6m ago",
-"smp.last.36":"36s ago",
-"smp.tok.cursor":"Cursor has no usage API",
+"smp.tok.cursor":"Cursor usage cannot be read",
 "smp.tok.zcode":"The usage fields in the zcode log are masked, there are no numbers",
-"smp.bg.label":"Background task",
-"smp.bg.name":"Merge script",
-"smp.bg.task":"#12 seven-step check, 8 passed / 0 failed",
 "smp.arch":"To-do 4: 1 question waiting for an answer, 0 balls in your PR/issue, 0 stations ready, 3 assigned but not started",
 };
 /* 样例数据里写死的中文：换成当前语言，样例也看懂 */
@@ -446,12 +436,8 @@ const SAMPLE_TXT={
   "0 秒前":"smp.last.0",
   "61 秒前":"smp.last.61",
   "6 分前":"smp.last.6m",
-  "36 秒前":"smp.last.36",
   "Cursor 没有用量接口":"smp.tok.cursor",
   "zcode 日志里的用量字段是打码的，读不到数字":"smp.tok.zcode",
-  "后台任务":"smp.bg.label",
-  "合并脚本":"smp.bg.name",
-  "#12 七步检查，8 通过 / 0 失败":"smp.bg.task",
   "待办 4：没回的问题 1，球在你的 PR/issue 0，可派工位 0，派了没开工 3":"smp.arch",
 };
 function TR(k,v){const s=(uiLang()==="en"?I18N_EN:I18N_ZH)[k];const t=(s==null?I18N_ZH[k]:s)||k;
@@ -618,48 +604,13 @@ function localizeSample(v){
   if(Array.isArray(v))return v.map(localizeSample);
   if(v&&typeof v==="object"){const o={};for(const k in v)o[k]=localizeSample(v[k]);return o}
   return v}
-/* 实时：直接吃 dashboard.py 现有接口（?live=1，同源）。服务端有 /api/office 时优先用它。 */
+/* 实时：只读 /api/office（服务端已经把办公室要的东西拼好了）。
+   读不到就抛出去：外头的定时器接住，画面停在上一帧；别拿别的接口拼一份空名单把猫全赶走。 */
 async function loadLive(base){
-  const J=async p=>{const r=await fetch(base+p,{cache:"no-store"});if(!r.ok)throw new Error(p+" "+r.status);return r.json()};
-  try{const o=await J("/api/office");$("#src-note").textContent=TR("d.office");return o}catch(e){}
-  const [st,mt,ca,qa,ar,mg]=await Promise.all(["/api/stations","/api/metrics","/api/cards","/api/quota","/api/arch","/api/merge"].map(p=>J(p).catch(()=>null)));
-  $("#src-note").textContent=TR("d.live");
-  return adaptLive({stations:st,metrics:mt,cards:ca,quota:qa,arch:ar,merge:mg});
-}
-/* 把 dashboard.py 的原始返回拼成办公室用的结构（字段对照见 README） */
-function adaptLive(R){
-  const rows=(R.metrics&&R.metrics.stations&&R.metrics.stations.length?R.metrics.stations:(R.stations&&R.stations.rows)||[]);
-  const C=(R.metrics&&R.metrics.c)||{}, TOK=(R.metrics&&R.metrics.tok)||{}, cards=((R.cards&&R.cards.cards)||[]);
-  const BG=new Set(["background"]), SKIP=/^D$/;
-  const chans=[];let i=0;
-  for(const r of rows){
-    const id=r.station||r.id; if(BG.has(id)||SKIP.test(id)||SKIP.test(r.model||""))continue;
-    const m=C[id]||{}, c=cards.find(x=>x.key===id||x.station===id)||{};
-    let state=r.enabled===false?"off":(m.state||r.state||"idle");
-    if(c.enabled===false||((c.color==="grey"||c.color==="red")&&(c.word_code==="off"||c.word_code==="not_connected"
-      ||/已停|已禁用|已关闭|离线|断开|不通|可能挂了|没开/.test(c.word||""))))state="off";
-    /* 与 dashboard.station_status() 同一规则 */
-    const lead=id==="架构师"||id==="主模型"||id==="TeamLeader"||id==="Leader";
-    let used=c.quota&&c.quota.pct!=null?c.quota.pct:null, slot=c.quota&&c.quota.slot, src=c.quota&&c.quota.source;
-    if(c.quota_mode==="off"){used=null;slot=null;
-src=null}else if(lead&&R.quota&&R.quota.per&&R.quota.per.cursor&&R.quota.per.cursor.max_pct!=null){used=R.quota.per.cursor.max_pct;slot=TR("d.month");
-      src=R.quota.per.cursor.source}
-    chans.push({id,slot:r.slot||"",role:lead?"lead":"worker",label:lead?TR("d.leader"):id,name:lead?String(r.model||"").replace(/（.*）/,
-      ""):String(r.model||"").replace(/\u00b7/g," "),model:r.model,channel:r.channel,
-            state, state_word:stateWord(state), state_sub:m.sub??r.state_sub, quota_mode:c.quota_mode||(lead?"off":undefined), quota_used_pct:used,
-      quota_left_pct:used==null?null:Math.max(0,Math.round(100-used)),
-      quota_slot:slot,quota_source:src,quota_reset:c.quota&&c.quota.reset,task_d:m.task_d||m.task||r.latest,tool:m.tool,queue:m.queue||0,
-      last:r.last,tok:TOK[id]||null,accent:ACCENTS[i++%ACCENTS.length]});
-  }
-  const a=(R.metrics&&R.metrics.a)||{}, b=(R.metrics&&R.metrics.b)||{};
-  const mg=R.merge||{}, bg=[];
-  if(mg.heartbeat)bg.push({id:"background",label:TR("d.bgTask"),name:TR("d.mergeScript"),state:mg.current&&mg.heartbeat.ok?"run":(mg.heartbeat.ok?"idle":"off"),
-    state_word:mg.heartbeat.ok?"":TR("d.offline"),
-          task_d:mg.current&&mg.heartbeat.ok?("#"+mg.current.pr+" "+(mg.current.phase||"")):TR("d.idle"),
-     heartbeat:mg.heartbeat.age_s!=null?TR("d.ago",{n:mg.heartbeat.age_s}):"", queue:(mg.daemon_queue||[]).length});
-  return {schema:"boxbox.office/1",fetched:(R.metrics||{}).fetched,
-    strip:{calls_today:R.calls_today??null,ok_pct:a.ok_pct,running:(b.run||[]).length,total:(b.run||[]).length+(b.wait||[]).length+(b.idle||[]).length},
-    arch:{count:(R.arch&&R.arch.count)||0,summary:R.arch&&R.arch.summary},channels:chans,background:bg};
+  const r=await fetch(base+"/api/office",{cache:"no-store"});
+  if(!r.ok)throw new Error("/api/office "+r.status);
+  $("#src-note").textContent=TR("d.office");
+  return await r.json();
 }
 
 /* ===================== 画布 ===================== */
@@ -1040,7 +991,7 @@ function boxGuy(x,y,lead,ch,t,pose){ // 纸箱人：方盒身体 + 点点眼 + �
 let SKIN=SKINS[Q.get("skin")]||SKINS[{cats:"chibicat"}[Q.get("skin")]]||SKINS.chibicat;
 
 /* ===================== 场景 / 布局 ===================== */
-const BOSS={x:228,y:118}, PRINTER={x:436,y:252}, CUSHION={x:40,y:228}, TEA={x:30,y:112};
+const BOSS={x:228,y:118}, CUSHION={x:40,y:228}, TEA={x:30,y:112};
 const ZONE={tea:{x:4,y:64,w:104,h:94},sofa:{x:4,y:162,w:104,h:104},desk:{x:112,y:64,w:254,h:202},meet:{x:370,y:64,w:106,h:140}};
 const SPOTS={coffee:[[26,132],[40,134]],fridge:[[84,134],[72,136]],sofa:[[28,214],[46,214],[64,214],[82,214]],
   rug:[[22,226],[86,228]],table:[[32,244],[76,244]],brew:[[54,126]],fridgeopen:[[62,126]]};  /* 融合：原型的「地毯刷手机」「茶几喝茶」搬进沙发区 */
@@ -1059,7 +1010,7 @@ const PROJ={k:0,t0:0,was:false};   /* 投影幕布：k 0=卷起 1=全放下 */
 const GATHER_SPOTS=[[194,164],[281,164],[162,138],[314,138],[122,138],[354,138]];
 /* ，相邻至少隔一只猫的宽度，不压首领的箱子 / 名字标签 / 头顶，? 各自在头顶互不压 */
 let ACTLOG=[];
-let STATIONS=[], CH={}, ENVS=[], PUFFS=[], BGT=[];
+let STATIONS=[], CH={}, ENVS=[], PUFFS=[];
 const MAX_WS=6;
 let SLOT_MEM={};   /* 没给 slot 的老数据：记住谁坐哪，工位数量变化时其它猫不挪 */
 function slotFor(chans){ /* 频道 → 槽位：feed 给了 slot（"A"…"F"）就坐自己的；没给的按顺序补空位，坐过的记住 */
@@ -1092,7 +1043,6 @@ function syncData(d){
     if(!lead&&c.state==="run"&&ch.state!=="run")sceneDrop(c.id,"assign");   /* 被派活：立刻退出场景回工位 */
     ch.cat=catNo;ch.look=lk;ch.data=c;ch.st=st;ch.state=ch.pending?ch.shown:c.state;CH[c.id]=ch;
   });
-  BGT=d.background||[];
   STATIONS.sort((a,b)=>a.y-b.y);
   if(evDriven)applyEvents(d.events);
   feedAnimSync(prev);   /* live 模式下 feed 里新增 / 消失的打工猫播上岗 / 抬走动画（页面刚打开那次不播） */
@@ -1606,8 +1556,8 @@ function drawRoom(t){
      g.lineTo(xa+1+P.dx*1.02,y1);g.lineTo(xa-1+P.dx*.98,y1);g.closePath();g.fill()}
    g.restore();}
   // 挂钟（跟电脑本地时间走，每分钟跳一格）：和绿植一起居中放在大窗左侧那段空墙上
-  const now=new Date(Date.now()),hh=now.getHours()%12+now.getMinutes()/60,mm=now.getMinutes();R(78,12,13,13,"#e5e7eb");R(79,13,11,11,"#f8fafc");
-  const hand=(a,l,c)=>{for(let i=0;i<l;i+=.5)R(84.5+Math.sin(a)*i-.25,18.5-Math.cos(a)*i-.25,.5,.5,c)};hand(hh/12*Math.PI*2,3,"#111827");hand(mm/60*Math.PI*2,
+  const now=new Date(Date.now()),hh=now.getHours()%12+now.getMinutes()/60,mm=now.getMinutes();R(122,12,13,13,"#e5e7eb");R(123,13,11,11,"#f8fafc");
+  const hand=(a,l,c)=>{for(let i=0;i<l;i+=.5)R(128.5+Math.sin(a)*i-.25,18.5-Math.cos(a)*i-.25,.5,.5,c)};hand(hh/12*Math.PI*2,3,"#111827");hand(mm/60*Math.PI*2,
     4.4,"#e10600");
   // 立式白板（TeamLeader 待办，首领工位右边，带支架；影子在 drawShadows 里画）
   const B=TODO_BOARD;R(B.x+5,B.y+B.h,1.5,15,"#57534e");R(B.x+B.w-6.5,B.y+B.h,1.5,15,"#57534e");R(B.x+B.w/2-.75,B.y+B.h,1.5,12,"#44403c");R(B.x+3,B.y+B.h+14,
@@ -1619,9 +1569,9 @@ function drawRoom(t){
   // 霓虹牌
   g.globalAlpha=.18+.04*Math.sin(t*2);R(380,11,88,17,"#e10600");g.globalAlpha=1;R(382,13,84,13,"#1a0b0d");
   drawThemeSwitch();   // 昼夜开关（霓虹牌正下方）
-  drawDockBtns();      // 动态 / 用量（挂钟右边，只在嵌进首页时画）
-  // 绿植（v2：右边那盆去掉，左边这盆挪到挂钟旁边）
-  for(const px of [56]){R(px,48,9,12,"#7c4a24");R(px-1,47,11,2,"#92582c");for(let i=0;i<7;i++){const a=-1.3+i*.45;R(px+4.5+Math.cos(a)*7-1,
+  drawDockBtns();      // 动态 / 用量（画面最左边，只在嵌进首页时画）
+  // 绿植（v2：右边那盆去掉，只剩这一盆，在挂钟左边）
+  for(const px of [100]){R(px,48,9,12,"#7c4a24");R(px-1,47,11,2,"#92582c");for(let i=0;i<7;i++){const a=-1.3+i*.45;R(px+4.5+Math.cos(a)*7-1,
     44-Math.abs(Math.sin(a))*8+Math.sin(t+i)*.5,3,2,i%2?"#16a34a":"#22c55e")}}
   // ② 茶水间：吧台 + 咖啡机 + 小冰箱
   R(8,112,96,4,"#6b4423");R(8,116,96,10,"#4a2f18");R(8,112,96,1,"#8a5a30");
@@ -1686,7 +1636,7 @@ function drawShadows(t){const P=THEME.phase;
   for(const st of STATIONS){const w=st.lead?40:26;castShadow(st.x-w/2,st.x+w/2+28,st.y,st.lead?24:20)}   /* 工位（纸箱 + 桌子） */
   for(const id in CH){const ch=CH[id];if(!ch.inBox&&ch.state!=="off")castShadow(ch.x-5,ch.x+5,ch.y,20)}   /* 在外面走动的猫 */
   const B=TODO_BOARD;castShadow(B.x+2,B.x+B.w-2,B.y+B.h+15,30);   /* 立式白板 */
-  castShadow(16,96,216,14);castShadow(8,104,126,12);castShadow(36,72,248,6);castShadow(424,448,252,14);   /* 沙发 / 吧台 / 茶几 / 打印机 */
+  castShadow(16,96,216,14);castShadow(8,104,126,12);castShadow(36,72,248,6);   /* 沙发 / 吧台 / 茶几 */
 }
 function drawLightFx(t){const P=THEME.phase;
   if(P==="day"||P==="dawn"){ // 白天 / 黎明：三道淡光束 + 光束里慢慢飘的尘埃
@@ -1731,12 +1681,6 @@ function drawLight(t){ /* 台灯光晕：只在夜晚（PAL.lampA），只亮有
     const grd=g.createRadialGradient(cx,cy,3,cx,cy,st.lead?38:30);grd.addColorStop(0,
       "rgba(255,208,120,"+(PAL.lampA*st.lampK*(1+.08*Math.sin(t*3+st.seed))).toFixed(3)+")");grd.addColorStop(1,"rgba(255,208,120,0)");
     g.fillStyle=grd;g.fillRect(cx-40,cy-40,80,80)}g.restore()}
-}
-function drawPrinter(t){
-  const b=BGT[0];if(!b)return;const run=b.state==="run",x=PRINTER.x,y=PRINTER.y;
-  R(x-12,y-14,24,14,"#4b5563");R(x-12,y-14,24,1,"#6b7280");R(x-10,y-11,20,3,"#1f2937");R(x-12,y-1,24,1,"#374151");
-  R(x-9,y-6,3,2,run?(Math.floor(t*4)%2?PAL.run:"#14532d"):"#374151");R(x-5,y-6,3,2,"#1f2937");
-  if(run){const p=(t*.6)%1;R(x-6,y-11-p*5,12,p*5,"#f8fafc");for(let i=0;i<p*4;i++)R(x-4,y-15-i*1.2+1,7,.5,"#94a3b8")}
 }
 function drawHP(ch){
   const d=ch.data,lead=ch.st.lead;if(!ch.head||ch.spawnHide)return;let x=Math.round(ch.head.x-(lead?14:11)),y=Math.round(ch.head.y-4);
@@ -1866,7 +1810,8 @@ function isTense(ch){const st=ch.state,d=ch.data||{};if(st==="off")return false;
 function drawSweat(ch,t){const h=ch.head;if(!h)return;for(let i=0;i<2;i++){const p=(t*.9+i*.5)%1,x=h.x-10-i*3,y=h.y+6+p*7;hi.globalAlpha=1-p*.7;
   hi.fillStyle="#7dd3fc";hi.fillRect(W2(x),W2(y),W2(1.4),W2(2));hi.fillRect(W2(x+.35),W2(y-.8),W2(.7),W2(.8));hi.fillStyle="#e0f2fe";hi.fillRect(W2(x+.2),
     W2(y+.3),W2(.4),W2(.6));hi.globalAlpha=1}}
-function actKey(ch){const k=actKind(ch);if(!k||k==="zzz"||persistentSym(ch))return null;return k}   /* 想法气泡 / 睡着 / 聊天时不冒活动气泡 */
+function actKey(ch){const k=actKind(ch);if(!k||k==="zzz"||persistentSym(ch))return null;
+  if(statusBubOn(ch))return null;return k}   /* 想法气泡 / 睡着 / 聊天 / 一句话状态在时不冒活动气泡 */
 function bubbleTick(){
   for(const id in CH){const ch=CH[id];const k=actKey(ch);
     if(ch.bubOn!=null&&(T-ch.bubOn>=BUB_SHOW||!k||k!==ch.bubKey))ch.bubOn=null;   /* 到点 / 换成常驻符号 / 活动又变 → 收起 */
@@ -1900,6 +1845,26 @@ function drawPixBubble(ch,key,al,lift){if(!ch.head)return;
   hi.fillStyle="#2b2233";hi.fillRect(W2(bx-1.5),W2(by+.5),W2(3),W2(.75));hi.fillRect(W2(bx-.75),W2(by+1.25),W2(1.5),W2(.75));
   hi.fillStyle="#fffdf7";hi.fillRect(W2(bx-1),W2(by),W2(2),W2(.9));
   pix(ICON[key],bx,by-h/2,1);hi.restore()}
+/* 在干活的猫：头顶一句话状态（和看板同一句）；有想法 / 开会 / say 气泡时不画 */
+function clipLine(s,n){const a=Array.from(String(s||""));return a.length>n?a.slice(0,n).join("")+"…":a.join("")}
+function statusLine(ch){const d=ch.data||{};return ch.state==="run"&&d.status_line?String(d.status_line):null}
+function statusBubOn(ch){if(!statusLine(ch))return false;
+  if(SCENE&&PARTY.includes(SCENE.name)&&SCENE.ids.has(ch.id))return false;   /* 场景另有自己的气泡 */
+  if(persistentSym(ch)||SAYFX[ch.st.slot])return false;
+  if(SKIN.zoned&&(ch.goal==="meet"||(inMeeting(ch)&&!ch.inBox)))return false;   /* 开会气泡在时不叠 */
+  return true}
+function statusBubGeom(ch){const line=statusLine(ch);if(!line||!statusBubOn(ch)||!ch.head)return null;
+  const s=clipLine(line,18),sz=3.3,bx=ch.head.x,by=ch.head.y-(ch.state==="off"?0:(ch.hp?11:6))-(ch.st.lead?2:0);
+  hi.font=`700 ${sz*S}px "Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Noto Serif CJK SC",sans-serif`;
+  const w=Math.max(10,hi.measureText(s).width/S+4.4),h=sz+3.2;
+  return {text:s,x:bx-w/2,y:by-h,w,h}}
+function drawStatusBub(ch){const b=statusBubGeom(ch);if(!b)return;hi.save();
+  hi.fillStyle="#2b2233";hi.fillRect(W2(b.x-.5),W2(b.y-.5),W2(b.w+1),W2(b.h+1));
+  hi.fillStyle="#fffdf7";hi.fillRect(W2(b.x),W2(b.y),W2(b.w),W2(b.h));
+  hi.fillStyle="#2b2233";hi.fillRect(W2(b.x+b.w/2-1.5),W2(b.y+b.h+.5),W2(3),W2(.75));
+  hi.fillRect(W2(b.x+b.w/2-.75),W2(b.y+b.h+1.25),W2(1.5),W2(.75));
+  hi.fillStyle="#fffdf7";hi.fillRect(W2(b.x+b.w/2-1),W2(b.y+b.h),W2(2),W2(.9));
+  txt(b.text,b.x+b.w/2,b.y+b.h-1.7,{sz:3.3,b:1,c:"#2b2233"});hi.restore()}
 /* ===================== 开会气泡：气泡 + 图标，不写字（office-v2/spec.md 第 6 节） ===================== */
 /* 18 个 8×8 像素图标：话题 10 + 情绪 8；气泡就是平时活动气泡的样式（drawPixBubble），里面只画一个图标 */
 Object.assign(ICON,MICON);
@@ -1961,13 +1926,10 @@ hi.fillStyle="#ff4d4f";let tw=0;for(const ch of lab)tw+=hi.measureText(ch).width
     const sym=persistentSym(ch),sayUp=!!SAYFX[ch.st.slot];   /* ，气泡收起后恢复 */
     if(sym==="bang"){if(!sayUp){youBang(ch,t);if(ch.head)txt(TR("q.yourCall"),ch.head.x-6,ch.head.y-14,{sz:4.6,b:1,c:"#1f2937",bg:"#fde68a",bd:"#d97706"})}}
     else if(sym)drawPersistent(ch,sym,t);   /* 常驻符号在 → 不画活动气泡（一只猫头顶同时只出一样） */
+    else if(statusBubOn(ch))drawStatusBub(ch);   /* 在干活：一句话状态顶掉活动气泡 */
     else drawActBubble(ch);
     if(isTense(ch))drawSweat(ch,t);
   }
-  const b=BGT[0];if(b){txt(b.label,PRINTER.x,PRINTER.y+7,{sz:4,c:PAL.dim});
-txt(b.state==="run"?TR("q.merging",{n:(b.task_d||"").split(" ")[0]}):(b.state==="off"?(b.state_word||TR("q.offline")):TR("q.idle")),
-    PRINTER.x,PRINTER.y+12.5,{sz:3.6,
-    c:b.state==="run"?PAL.run:"#6b7280"})}
   if(HOVER){const ch=CH[HOVER];if(ch){const hb=SKIN.hit(ch);hi.strokeStyle="rgba(255,255,255,.35)";hi.lineWidth=Math.max(1,S*.3);hi.setLineDash([S,S]);
     rr(W2(hb.x),W2(hb.y),W2(hb.w),W2(hb.h),S*2);hi.stroke();hi.setLineDash([])}}
   if(ARC_HOVER)txt(uiLang()==="en"?"Party time":"聚会时间",ARCADE.foot[0],ARCADE.foot[1]-ARCADE.h-3.5,{sz:4.6,b:1,c:"#1f1a24",bg:"#fffdf7",bd:"#2b1d12"});
@@ -2355,12 +2317,11 @@ function tick(dt){T+=dt;sceneTick();
   drawRoom(T);
   EMPTY_DRAWN={};   /* 每帧重记：哪些空位画了虚线框 / 字母、用的什么色（测试钩子 emptyDrawn） */
   if(SKIN.zoned){drawShadows(T);drawLightFx(T)}   /* v2 光影只给猫猫箱皮肤；纸箱人（黑白皮肤）不画光影 */
-  // 深度排序：工位 + 空位虚线框 + 在外面的角色 + 打印机 + 上岗动画的箱子 / 猫 / 快递猫
+  // 深度排序：工位 + 空位虚线框 + 在外面的角色 + 上岗动画的箱子 / 猫 / 快递猫
   const items=[];for(const st of STATIONS){const ch=CH[st.id];if(SKIN.zoned&&ch.spawnHide)continue;items.push({y:st.y,f:()=>SKIN.drawStation(st,CH[st.id],T)})}
   {const occ=new Set(STATIONS.filter(s=>!(SKIN.zoned&&CH[s.id]&&CH[s.id].spawnHide)).map(s=>s.slot));
     for(const s of SLOT_ORDER)if(!occ.has(s))items.push({y:SLOT_POS[s][1],f:()=>drawEmptySlot(s)})}
   for(const id in CH){const ch=CH[id];if(!ch.inBox&&ch.state!=="off"&&!ch.spawnHide)items.push({y:ch.y,f:()=>SKIN.drawOut(ch,T)})}
-  items.push({y:PRINTER.y,f:()=>drawPrinter(T)});
   for(const s in SLOT_FX){const fx=SLOT_FX[s],pp=slotXY(s);
     if(fx.box)items.push({y:pp.y+.5,f:()=>drawFxBox(s)});
     if(fx.cat)items.push({y:fx.cat.y+.2,f:()=>drawFxCat(s)})}
@@ -2392,7 +2353,6 @@ let OPEN=null,HOVER=null;
 function worldPt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*WW,y:(e.clientY-r.top)/r.height*WH}}
 function hitTest(p){let best=null;for(const id in CH){if(CH[id].spawnHide)continue;const b=SKIN.hit(CH[id]);
   if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h)best=id}
-  if(!best&&BGT[0]&&Math.abs(p.x-PRINTER.x)<14&&p.y>PRINTER.y-18&&p.y<PRINTER.y+12)best="__bg";
   if(!best&&p.x>=TODO_BOARD.x&&p.x<=TODO_BOARD.x+TODO_BOARD.w&&p.y>=TODO_BOARD.y&&p.y<=TODO_BOARD.y+TODO_BOARD.h)best="__todo";return best}
 function todoHtml(){const a=(DATA&&DATA.arch)||{},it=a.items||[];const hm=s=>s?String(s).replace("T"," ").slice(5,16):"—";
   return `<h4>${TR("p.todoTitle",{n:a.count||0})}</h4><div class="sub">${esc(a.summary||"")}</div>`+
@@ -2405,7 +2365,7 @@ cv.addEventListener("mousemove",e=>{const p=worldPt(e);
   const inv=inviteGeom();INV_HOVER=!!inv&&p.x>=inv.x0&&p.x<=inv.x0+inv.w&&p.y>=inv.y0&&p.y<=inv.y0+inv.h;   /* 街机 / 邀请气泡的悬停态 */
   ARC_HOVER=arcadeHit(p);
   SW_HOVER=switchHit(p);BTN_HOVER=dockBtnHit(p);       /* 昼夜开关 / 动态用量按钮的悬停态 */
-  const h=(ARC_HOVER||INV_HOVER||SW_HOVER||BTN_HOVER)?null:hitTest(p);HOVER=h&&h!=="__bg"&&h!=="__todo"?h:null;
+  const h=(ARC_HOVER||INV_HOVER||SW_HOVER||BTN_HOVER)?null:hitTest(p);HOVER=h&&h!=="__todo"?h:null;
   cv.style.cursor=(ARC_HOVER||INV_HOVER||SW_HOVER||BTN_HOVER||HOVER)?"pointer":"default";
   const c=HOVER&&CH[HOVER];
   cv.title=SW_HOVER?modeName(themeMode()):BTN_HOVER?(uiLang()==="en"?BTN_HOVER.en:BTN_HOVER.zh):ARC_HOVER?(uiLang()==="en"?"Party time":"聚会时间")
@@ -2417,15 +2377,21 @@ cv.addEventListener("click",e=>{const p=worldPt(e);if(sayClick(p))return;if(invi
 return}if(dockBtnClick(p)){e.stopPropagation();return}if(arcadeClick(p)){e.stopPropagation();return}const h=hitTest(p);if(h)openDrawer(h);
   else closeDrawer()});
 $("#dx").onclick=closeDrawer;
-function closeDrawer(){OPEN=null;$("#drawer").classList.remove("open")}
+function closeDrawer(){OPEN=null;$("#drawer").classList.remove("open");stopLive()}
+/* 在干活的猫：抽屉里「最近的动作」；/api/stations/live 同源取，开着每 3 秒再取一次，取不到不显示这块 */
+let LIVE_T=null,LIVE_LAST=null;
+function stopLive(){if(LIVE_T!=null){clearInterval(LIVE_T);LIVE_T=null}}
+function liveRows(v){const K={read:"lv.read",edit:"lv.edit",bash:"lv.bash",think:"lv.think"};
+  return (v.actions||[]).slice(-8).reverse().map(a=>`<div class="todo-it"><div><b>${TR(K[a.kind]||"lv.think")}</b>${TR("p.sep")}${
+  esc(clipLine(String(a.target||""),40))}</div></div>`).join("")}
+function liveHtml(v){return `<h4>${TR("lv.title")}</h4><div class="sub">${esc(v.status_line||"")}</div>${liveRows(v)}`}
+async function loadActs(id){try{const r=await fetch((LIVE_BASE||"")+"/api/stations/live?id="+encodeURIComponent(id),{cache:"no-store"});
+  if(!r.ok)throw 0;const v=await r.json();LIVE_LAST={id,html:liveHtml(v)};const box=$("#d-live");
+  if(box&&OPEN===id){box.innerHTML=LIVE_LAST.html;box.hidden=false}}catch(e){}}
+function startLive(id){stopLive();loadActs(id);LIVE_T=setInterval(()=>{if(OPEN===id&&!document.hidden)loadActs(id)},3000)}
 function openDrawer(id){
-  OPEN=id;let html="";
+  OPEN=id;stopLive();let html="";
   if(id==="__todo"){html=todoHtml()}
-  else if(id==="__bg"){const b=BGT[0];
-    html=`<h4>${TR("p.paren2",{a:esc(b.label),b:esc(b.name)})}</h4><div class="sub">${TR("p.bgNote")}</div>`+
-    `<dl><dt>${TR("p.state")}</dt><dd>${chip(b.state)}</dd>
-    <dt>${TR("p.current")}</dt><dd>${esc(b.task_d)}</dd><dt>${TR("p.heartbeat")}</dt><dd>${esc(b.heartbeat||"—")}</dd>
-    <dt>${TR("p.queue")}</dt><dd>${TR("p.queueN",{n:b.queue??0})}</dd></dl>`}
   else{const ch=CH[id];if(!ch)return closeDrawer();const d=ch.data,left=d.quota_left_pct;
     const al=lvl1Alerts().find(a=>a.station===id);   /* 点一只头上有 ! 的猫，抽屉最上面也显示它那条提示 */
     const alHtml=al?`<div class="drawer-alert"><b>!</b> ${esc(al.text||"")}${al.action?" → "+esc(al.action):""}${
@@ -2442,8 +2408,11 @@ function openDrawer(id){
     <dt>${TR("p.queue")}</dt><dd>${TR("p.queueN",{n:d.queue||0})}${
       (d.queue_items||[]).length?"<br>"+d.queue_items.map(esc).join("<br>"):""}</dd><dt>${TR("p.quota")}</dt><dd>${
       qb}</dd><dt>${TR("p.token")}</dt><dd>${tk}</dd><dt>${TR("p.last")}</dt><dd>${esc(d.last||"—")}</dd></dl>`;
+    if(ch.state==="run")html+=`<div id="d-live"${LIVE_LAST&&LIVE_LAST.id===id?"":" hidden"}>${
+      LIVE_LAST&&LIVE_LAST.id===id?LIVE_LAST.html:""}</div>`;   /* 在干活才加；syncData 每 5 秒重画抽屉，先用上一份 */
     html=alHtml+html}
   $("#dbody").innerHTML=html;$("#drawer").classList.add("open");
+  if(id!=="__todo"&&CH[id]&&CH[id].state==="run")startLive(id);
   const ds=$("#d-summon");if(ds)ds.onclick=()=>summonLeader((lvl1Alerts().find(a=>a.action_id==="summon")||{}).station||"");
   const da=$("#d-add-leader");if(da)da.onclick=()=>openAddLeader();
 }
@@ -2565,13 +2534,13 @@ document.addEventListener("click",e=>{const p=$("#party-pop");if(p&&!p.hidden&&!
    首页顶栏下面那一行（#dock：动态 / 用量 + 自动 / 白天 / 夜晚）没了，入口都挪进画布里：
    - 霓虹牌正下方挂一个昼夜开关（48×28，素材逐像素搬进代码）：点它弹五档菜单（自动 / 清晨 / 白天 / 傍晚 / 夜晚），
      旋钮指向当前档；悬停冒一行当前档名。档位存本机（bx-office-theme），照旧 postMessage 给首页改背景色。
-   - 挂钟右边挂「动态」「用量」两个按钮（38×16）：点它让首页开同名面板；只在嵌进首页时（?embed=1）画，
+   - 画面最左边挂「动态」「用量」两个按钮（38×16，并排一行）：点它让首页开同名面板；只在嵌进首页时（?embed=1）画，
      单独打开 /office 不画。未读数由首页 postMessage 过来（bx-unread），红点 + 数字画在按钮右上角。 */
 const SWITCH={x:392,y:30,w:48,h:28};                 /* 霓虹牌正下方（MANIFEST：392,30） */
 const MODE_ORDER=["auto","dawn","day","dusk","night"];
 const MODE_NAME={auto:{zh:"自动",en:"Auto"},dawn:{zh:"清晨",en:"Dawn"},day:{zh:"白天",en:"Day"},dusk:{zh:"傍晚",en:"Dusk"},night:{zh:"夜晚",en:"Night"}};
-const DOCK_BTN=[{k:"feed",panel:"tl",x:96,y:10,w:38,h:16,zh:"动态",en:"Activity"},
-                {k:"usage",panel:"tok",x:96,y:28,w:38,h:16,zh:"用量",en:"Usage"}];
+const DOCK_BTN=[{k:"feed",panel:"tl",x:8,y:12,w:38,h:16,zh:"动态",en:"Activity"},
+                {k:"usage",panel:"tok",x:50,y:12,w:38,h:16,zh:"用量",en:"Usage"}];
 let SW_HOVER=false,SW_PRESS=false,BTN_HOVER=null,BTN_PRESS=null;    /* 这一帧鼠标在开关 / 哪个按钮上 */
 let UNREAD={feed:0,usage:0};                         /* 首页报过来的未读数（bx-unread） */
 function modeName(m){const n=MODE_NAME[m]||MODE_NAME.auto;return uiLang()==="en"?n.en:n.zh}
@@ -2595,9 +2564,10 @@ function renderThemePop(){const p=$("#theme-pop");if(!p)return;p.innerHTML="";
     if(m===themeMode())b.classList.add("on");       /* 当前档反白 */
     b.onclick=()=>{closeThemePop();setThemeMode(m)};
     p.appendChild(b)}}
-function placeThemePop(){const p=$("#theme-pop");if(!p||p.hidden)return;   /* 菜单开在开关左边（开关贴着右边墙） */
-  const r=switchRect(),c=cv.getBoundingClientRect(),s=$("#stage").getBoundingClientRect(),k=c.width/WW;
-  p.style.left=Math.max(4,(c.left-s.left)+r.x*k-p.offsetWidth)+"px";
+function placeThemePop(){const p=$("#theme-pop");if(!p||p.hidden)return;   /* 菜单横着一行，开在开关左边（开关贴着右边墙） */
+  const r=switchRect(),c=cv.getBoundingClientRect(),s=$("#stage").getBoundingClientRect(),k=c.width/WW,w=p.offsetWidth;
+  const left=Math.max(4,Math.min((c.left-s.left)+r.x*k-w,s.width-w-4));   /* 右缘贴开关左缘，又不出画布两边 */
+  p.style.left=left+"px";
   p.style.top=((c.top-s.top)+r.y*k)+"px"}
 function switchClick(p){if(!switchHit(p))return false;   /* 点开关：开 / 关五档菜单 */
   const el=$("#theme-pop");if(!el)return false;
@@ -2606,8 +2576,10 @@ function switchClick(p){if(!switchHit(p))return false;   /* 点开关：开 / �
   return true}
 function dockBtnClick(p){const b=dockBtnHit(p);if(!b)return false;   /* 点按钮：让首页开同名面板 */
   try{if(parent&&parent!==window){const r=cv.getBoundingClientRect();   /* 按钮在 iframe 里的位置（首页拿它摆浮窗） */
+    const last=DOCK_BTN[DOCK_BTN.length-1];   /* 浮窗开在整排按钮右边：两个按钮并排，从左边那个开的话会盖住右边那个 */
+    const right=Math.max(b.x+b.w,last.x+last.w);
     parent.postMessage({type:"bx-open-panel",panel:b.panel,
-      rect:{x:r.left+b.x*r.width/WW,y:r.top+b.y*r.height/WH,w:b.w*r.width/WW,h:b.h*r.height/WH}},"*")}}catch(e){}
+      rect:{x:r.left+b.x*r.width/WW,y:r.top+b.y*r.height/WH,w:(right-b.x)*r.width/WW,h:b.h*r.height/WH}},"*")}}catch(e){}
   return true}
 addEventListener("keydown",e=>{if(e.key!=="Escape")return;   /* 焦点在画布里时按 Esc，首页的面板也要关 */
   try{if(parent&&parent!==window)parent.postMessage({type:"bx-close-panel"},"*")}catch(e){}})
@@ -2786,10 +2758,12 @@ function drawPartyHi(t){ /* 高清层：复盘的猫挠不了头，头上冒小�
   document.head.appendChild(s);
  }
  applyTheme(true);setInterval(applyTheme,60*1000);   /* 昼夜：每分钟检查一次（页面一打开直接到当前时段，不播过渡） */
- fit();const live=Q.get("live");BASE=live?await loadLive(live==="1"?"":live):await loadSample();if(live)LIVE_BASE=live==="1"?"":live;syncData(clone(BASE));
+ fit();const live=Q.get("live");
+ BASE=live?await loadLive(live==="1"?"":live).catch(()=>({channels:[]})):await loadSample();
+ if(live)LIVE_BASE=live==="1"?"":live;syncData(clone(BASE));
   if(live)loadThemeTimes(live==="1"?"":live);
   try{const m=localStorage.getItem("bx-office-mode");if(m==="list")document.querySelector('.seg button[data-v=list]').click()}catch(e){}
-  if(live)setInterval(async()=>{try{syncData(await loadLive(live==="1"?"":live))}catch(e){}},5000);
+  if(live)setInterval(async()=>{if(document.hidden)return;try{syncData(await loadLive(live==="1"?"":live))}catch(e){}},5000);
   last=performance.now();requestAnimationFrame(frame);
   animPost({type:"bx-anim-ready"});   /* 画布加载好、能接动画了，告诉首页（嵌在 iframe 里时） */
   window.__office={force(id,a){const ch=CH[id];const A=SKIN.idleActs.find(x=>x.a===a);const keep=SKIN.idleActs;SKIN.idleActs=[A];pickIdle(ch);

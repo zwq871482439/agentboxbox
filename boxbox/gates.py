@@ -98,7 +98,7 @@ def _check_command(gate, cwd, task_id, base_commit, checks, lang=None):
 def _git(cwd, *args):
     p = subprocess.run(["git", *args], cwd=str(cwd), shell=False,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                       timeout=GIT_TIMEOUT_S)
+                       timeout=GIT_TIMEOUT_S, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return p.returncode, p.stdout.decode("utf-8", "replace")
 
 
